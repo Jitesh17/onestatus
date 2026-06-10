@@ -1,0 +1,37 @@
+{
+  "people": [
+    "Jitesh",
+    "Neeraj",
+    "Abhishake",
+    "Shivam",
+    "Tanaka-san",
+    "Sato-san"
+  ],
+  "projects": [
+    {
+      "name": "BRAVIA Panel Calibration",
+      "name_ja": "ブラビア パネル キャリブレーション",
+      "tasks": [
+        "Color uniformity test rig",
+        "Japan-side review pipeline",
+        "Calibration dataset prep"
+      ]
+    },
+    {
+      "name": "Xperia Mic Array Tuning",
+      "name_ja": "エクスペリア マイクアレイ チューニング",
+      "tasks": [
+        "Noise suppression model",
+        "Field recording collection"
+      ]
+    },
+    {
+      "name": "Meeting Diarization Tool",
+      "name_ja": "会議ダイアライゼーション ツール",
+      "tasks": [
+        "Speaker separation module",
+        "Japanese ASR accuracy test"
+      ]
+    }
+  ]
+}

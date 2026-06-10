@@ -1,0 +1,21 @@
+# Brings up Postgres + backend together. Frontend runs separately with `npm run dev`
+# during week 1 for fast iteration (see README).
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: onestatus
+      POSTGRES_PASSWORD: onestatus
+      POSTGRES_DB: onestatus
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://onestatus:onestatus@db:5432/onestatus
+    ports: ["8000:8000"]
+    depends_on: [db]
+
+volumes:
+  pgdata:
