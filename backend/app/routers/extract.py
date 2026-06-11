@@ -6,7 +6,7 @@ edits the draft and saves it through the existing POST /updates path.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from .. import crud, schemas
+from .. import crud, models, schemas
 from ..database import get_db
 from ..extractor import extract, ExtractorError
 
@@ -23,11 +23,18 @@ def extract_update(data: schemas.ExtractRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=503, detail=str(e)) from e
 
     task_id = crud.resolve_task_id(db, draft.get("project"), draft.get("task"))
+    project = draft.get("project") or "unknown"
+    if task_id and project == "unknown":
+        # The task resolved by title even though the model left the project unknown;
+        # take the matched task's parent project (week-3 follow-up rule).
+        task_row = db.get(models.Task, task_id)
+        if task_row and task_row.project:
+            project = task_row.project.name
     return schemas.ExtractDraft(
-        project=draft.get("project") or "unknown",
+        project=project,
         task=draft.get("task"),
         task_id=task_id,
-        unknown_project=(draft.get("project") in (None, "unknown")),
+        unknown_project=(project == "unknown"),
         unknown_task=(draft.get("task") is not None and task_id is None),
         status=draft.get("status"),
         progress_pct=draft.get("progress_pct"),

@@ -35,11 +35,12 @@ Return JSON with exactly these keys:
   to the full name (e.g. "BRAVIA" or "bravia" -> "BRAVIA Panel Calibration").
 - "status": one of {STATUSES} when the request focuses on a task status, else null.
   "blocked tasks"->"blocked"; "in progress"/"ongoing"->"in_progress"; "finished"/"completed"->"done"; "not started"->"not_started".
-- "severity": one of {SEVERITIES} ONLY when the request names a blocker severity LEVEL
+- "severity": one of {SEVERITIES} ONLY when the request EXPLICITLY contains a severity-level word
   ("high severity blockers", "critical", "low priority"). The phrases "by severity" / "sort by severity"
-  / "most severe" are SORTING, not a filter -> leave severity null and set "sort":"severity".
+  / "most severe" / "top blockers" are SORTING, not a filter -> leave severity null and set "sort":"severity".
 - "sections": sections to SHOW ONLY (subset above). Use ["blockers"] for "just blockers". Leave [] when
   the request only filters (project/status/severity) or only sorts -- e.g. "focus on Xperia" -> sections [].
+  NEVER narrow sections unless the user names which section(s) they want to see.
 - "hide": sections to REMOVE. "hide risks" -> ["risks"]. "drop the project table" -> ["per_project"]. Else [].
 - "sort": one of {SORTS} or null. "by severity"/"most severe"->"severity"; "newest"/"latest"->"recent";
   "by progress"->"progress"; "by due date"->"due".
@@ -63,7 +64,18 @@ def _match_project(value, world):
     return None
 
 
-def _coerce(raw, world):
+# Words that justify a severity FILTER. Deliberately narrow: "by severity" / "most
+# severe" are sorting phrases and must not pass. JA terms kept specific ("中" alone
+# would false-match 進行中).
+_SEVERITY_WORDS = ("high", "medium", "low", "critical", "urgent", "重大", "緊急", "高い", "低い", "深刻")
+
+
+def _explicit_severity(request):
+    t = (request or "").lower()
+    return any(w in t for w in _SEVERITY_WORDS)
+
+
+def _coerce(raw, world, request=""):
     out = dict(EMPTY_CONFIG)
     out["project"] = _match_project(raw.get("project"), world)
     out["status"] = raw.get("status") if raw.get("status") in STATUSES else None
@@ -71,6 +83,11 @@ def _coerce(raw, world):
     out["sections"] = [s for s in (raw.get("sections") or []) if s in SECTIONS]
     out["hide"] = [s for s in (raw.get("hide") or []) if s in SECTIONS]
     out["sort"] = raw.get("sort") if raw.get("sort") in SORTS else None
+    # 7B guard: "top 3 blockers by severity" must sort, not filter. Despite the
+    # prompt, the model sometimes also sets severity="high"; drop the filter unless
+    # the request literally contains a severity-level word.
+    if out["severity"] and not _explicit_severity(request):
+        out["severity"] = None
 
     lim = raw.get("limit")
     out["limit"] = int(lim) if isinstance(lim, (int, float)) and lim > 0 else None
@@ -83,4 +100,4 @@ def interpret_view(request, world, model=None):
     if not request or not request.strip():
         return dict(EMPTY_CONFIG)
     raw = ollama_json(_system_prompt(world), request, model=model)
-    return _coerce(raw, world)
+    return _coerce(raw, world, request=request)
