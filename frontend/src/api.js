@@ -6,7 +6,12 @@ async function req(path, options = {}) {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    // Surface FastAPI's `detail` (e.g. the 503 "Ollama unreachable" message) when present.
+    let detail = "";
+    try { detail = (await res.json())?.detail || ""; } catch { /* non-JSON body */ }
+    throw new Error(detail || `${res.status} ${res.statusText}`);
+  }
   return res.status === 204 ? null : res.json();
 }
 
@@ -17,4 +22,5 @@ export const api = {
   createTask: (data) => req("/tasks", { method: "POST", body: JSON.stringify(data) }),
   listUpdates: () => req("/updates"),
   createUpdate: (data) => req("/updates", { method: "POST", body: JSON.stringify(data) }),
+  extractUpdate: (data) => req("/extract", { method: "POST", body: JSON.stringify(data) }),
 };

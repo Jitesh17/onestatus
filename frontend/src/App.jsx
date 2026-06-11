@@ -25,6 +25,7 @@ export default function App() {
       <div className="bar"><b>Sony OneStatus</b> &nbsp;·&nbsp; Manual entry (week 1, no AI)</div>
       <div className="wrap">
         {error && <div className="card" style={{ borderColor: "#c00", color: "#c00" }}>{error}</div>}
+        <AiUpdateForm tasks={tasks} onDone={refresh} />
         <ProjectForm onDone={refresh} />
         <TaskForm projects={projects} onDone={refresh} />
         <UpdateForm tasks={tasks} onDone={refresh} />
@@ -144,6 +145,186 @@ function UpdateForm({ tasks, onDone }) {
         <div><label>Owner</label><input value={nextStep.owner} onChange={e => setNextStep(n => ({ ...n, owner: e.target.value }))} /></div>
       </div>
       <button className="secondary" onClick={submit}>Save update</button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AI flow (week 2): type free-form text -> local LLM proposes a structured draft
+// -> human edits the confirmation blocks -> save through the existing POST /updates.
+// Nothing is saved until "Confirm & save".
+// ---------------------------------------------------------------------------
+function AiUpdateForm({ tasks, onDone }) {
+  const [text, setText] = useState("");
+  const [language, setLanguage] = useState("en");
+  const [author, setAuthor] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [draft, setDraft] = useState(null); // null = no proposal yet
+
+  async function extract() {
+    if (!text.trim()) return;
+    setBusy(true); setErr("");
+    try {
+      const d = await api.extractUpdate({ raw_text: text, language });
+      setDraft(d);
+    } catch (e) {
+      setErr(e.message || "Extraction failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirm() {
+    const payload = {
+      task_id: draft.task_id ?? null,
+      author: author || null,
+      language,
+      raw_text: text,
+      source: "text",
+      blockers: draft.blockers,
+      risks: draft.risks,
+      next_steps: draft.next_steps,
+    };
+    await api.createUpdate(payload);
+    setText(""); setAuthor(""); setDraft(null); setErr("");
+    onDone();
+  }
+
+  // Generic helpers to edit a row, add a row, or drop a row in a draft list field.
+  const setField = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+  const editItem = (key, i, patch) =>
+    setDraft(d => ({ ...d, [key]: d[key].map((it, j) => (j === i ? { ...it, ...patch } : it)) }));
+  const addItem = (key, blank) => setDraft(d => ({ ...d, [key]: [...d[key], blank] }));
+  const dropItem = (key, i) => setDraft(d => ({ ...d, [key]: d[key].filter((_, j) => j !== i) }));
+
+  return (
+    <div className="card" style={{ borderColor: "#1f3864" }}>
+      <h2>Add update from text (AI)</h2>
+      <label>Update text (English, Japanese, or mixed)</label>
+      <textarea rows="3" value={text} onChange={e => setText(e.target.value)}
+        placeholder="e.g. Color uniformity test rig is about 60% done, wrapping up sensor mounts by Friday." />
+      <div className="row">
+        <div><label>Language</label>
+          <select value={language} onChange={e => setLanguage(e.target.value)}>
+            <option value="en">English</option><option value="ja">Japanese</option>
+          </select>
+        </div>
+        <div><label>Author</label><input value={author} onChange={e => setAuthor(e.target.value)} /></div>
+      </div>
+      <button onClick={extract} disabled={busy || !text.trim()}>
+        {busy ? "Extracting..." : "Extract"}
+      </button>
+      {err && <p style={{ color: "#c00", marginBottom: 0 }}>{err}</p>}
+
+      {draft && (
+        <div style={{ marginTop: 16, borderTop: "1px solid #ececf0", paddingTop: 12 }}>
+          <div className="row" style={{ alignItems: "center" }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>Confirm the extracted update</h3>
+            <span className="muted">model confidence: {Math.round((draft.confidence || 0) * 100)}%</span>
+          </div>
+
+          {draft.unknown_project &&
+            <p className="tag blocked">Project not recognized. Pick the right task below, or add the project/task first.</p>}
+          {draft.unknown_task && !draft.unknown_project &&
+            <p className="tag blocked">Task "{draft.task}" did not match a known task. Pick it below.</p>}
+
+          <div className="row">
+            <div><label>Project (matched)</label>
+              <input value={draft.project === "unknown" ? "(unknown)" : draft.project} readOnly />
+            </div>
+            <div><label>Task</label>
+              <select value={draft.task_id ?? ""} onChange={e => setField("task_id", e.target.value ? Number(e.target.value) : null)}>
+                <option value="">(no task)</option>
+                {tasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="row">
+            <div><label>Status</label>
+              <select value={draft.status ?? ""} onChange={e => setField("status", e.target.value || null)}>
+                <option value="">(none)</option>
+                {STATUS.map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div><label>Progress %</label>
+              <input type="number" min="0" max="100" value={draft.progress_pct ?? ""}
+                onChange={e => setField("progress_pct", e.target.value === "" ? null : Number(e.target.value))} />
+            </div>
+            <div><label>Period</label>
+              <input value={draft.period ?? ""} onChange={e => setField("period", e.target.value || null)} />
+            </div>
+          </div>
+          {draft.owners?.length > 0 &&
+            <p className="muted">Owners detected: {draft.owners.join(", ")}</p>}
+
+          <DraftList title="Blockers" items={draft.blockers}
+            onAdd={() => addItem("blockers", { description: "", severity: "medium", owner: "", status: "open" })}
+            onDrop={i => dropItem("blockers", i)}
+            render={(b, i) => (
+              <div className="row">
+                <div style={{ flex: 3 }}><input placeholder="description" value={b.description}
+                  onChange={e => editItem("blockers", i, { description: e.target.value })} /></div>
+                <div><select value={b.severity ?? "medium"} onChange={e => editItem("blockers", i, { severity: e.target.value })}>
+                  {SEVERITY.map(s => <option key={s}>{s}</option>)}</select></div>
+                <div><input placeholder="owner" value={b.owner ?? ""} onChange={e => editItem("blockers", i, { owner: e.target.value })} /></div>
+                <div><select value={b.status ?? "open"} onChange={e => editItem("blockers", i, { status: e.target.value })}>
+                  <option>open</option><option>resolved</option></select></div>
+              </div>
+            )} />
+
+          <DraftList title="Risks" items={draft.risks}
+            onAdd={() => addItem("risks", { description: "", likelihood: "", impact: "", mitigation: "", owner: "" })}
+            onDrop={i => dropItem("risks", i)}
+            render={(r, i) => (
+              <>
+                <div className="row">
+                  <div style={{ flex: 2 }}><input placeholder="description" value={r.description}
+                    onChange={e => editItem("risks", i, { description: e.target.value })} /></div>
+                  <div><input placeholder="likelihood" value={r.likelihood ?? ""} onChange={e => editItem("risks", i, { likelihood: e.target.value })} /></div>
+                  <div><input placeholder="impact" value={r.impact ?? ""} onChange={e => editItem("risks", i, { impact: e.target.value })} /></div>
+                </div>
+                <div className="row">
+                  <div><input placeholder="mitigation" value={r.mitigation ?? ""} onChange={e => editItem("risks", i, { mitigation: e.target.value })} /></div>
+                  <div><input placeholder="owner" value={r.owner ?? ""} onChange={e => editItem("risks", i, { owner: e.target.value })} /></div>
+                </div>
+              </>
+            )} />
+
+          <DraftList title="Next steps" items={draft.next_steps}
+            onAdd={() => addItem("next_steps", { description: "", owner: "", due_date: "" })}
+            onDrop={i => dropItem("next_steps", i)}
+            render={(n, i) => (
+              <div className="row">
+                <div style={{ flex: 3 }}><input placeholder="description" value={n.description}
+                  onChange={e => editItem("next_steps", i, { description: e.target.value })} /></div>
+                <div><input placeholder="owner" value={n.owner ?? ""} onChange={e => editItem("next_steps", i, { owner: e.target.value })} /></div>
+                <div><input placeholder="due (YYYY-MM-DD)" value={n.due_date ?? ""} onChange={e => editItem("next_steps", i, { due_date: e.target.value || null })} /></div>
+              </div>
+            )} />
+
+          <div className="row" style={{ marginTop: 8 }}>
+            <button className="secondary" onClick={confirm}>Confirm &amp; save</button>
+            <button onClick={() => setDraft(null)} style={{ background: "#888" }}>Discard</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DraftList({ title, items, render, onAdd, onDrop }) {
+  return (
+    <div style={{ marginTop: 10 }}>
+      <label>{title}</label>
+      {items.length === 0 && <p className="muted" style={{ margin: "2px 0" }}>none</p>}
+      {items.map((it, i) => (
+        <div key={i} style={{ display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 6 }}>
+          <div style={{ flex: 1 }}>{render(it, i)}</div>
+          <button onClick={() => onDrop(i)} style={{ background: "#c0392b", marginTop: 0, padding: "7px 10px" }}>×</button>
+        </div>
+      ))}
+      <button onClick={onAdd} style={{ background: "#eee", color: "#333", marginTop: 4, padding: "5px 10px" }}>+ add</button>
     </div>
   );
 }

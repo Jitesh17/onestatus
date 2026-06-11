@@ -1,15 +1,19 @@
 """Run an extractor over the eval dataset and score it per field.
 
-Today it uses a placeholder extractor so you can see the scoring output. In week 2,
-replace `placeholder_extract` with a real call to the local model and pass --model.
+By default this calls the real local-model extractor (backend/app/extractor.py) against
+the eval world. Pass --placeholder to run the empty-returning stub instead (useful when
+Ollama is not available and you just want to see the scoring format).
 
 Usage:
-    python eval/run_eval.py
-    python eval/run_eval.py --model qwen2.5:7b      # once the real extractor is wired
+    python eval/run_eval.py                      # real extractor, default model
+    python eval/run_eval.py --model qwen2.5:7b   # real extractor, explicit model
+    python eval/run_eval.py --placeholder        # stub, no model needed
 """
-import argparse, json, os, difflib
+import argparse, json, os, sys, difflib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# Make backend/app importable so the eval uses the exact production extractor.
+sys.path.insert(0, os.path.join(HERE, os.pardir, "backend"))
 
 
 def load_dataset():
@@ -23,13 +27,20 @@ def load_dataset():
 
 
 # ---------------------------------------------------------------------------
-# Placeholder extractor. Returns empty structure so the harness runs end to end.
-# Week 2: swap this for a function that calls the local LLM with the constrained
-# JSON prompt and returns the same dict shape as `expected`.
+# Placeholder extractor. Returns empty structure so the harness runs end to end
+# without a model. Kept for --placeholder smoke tests.
 # ---------------------------------------------------------------------------
 def placeholder_extract(text, world, model=None):
     return {"project": "unknown", "task": None, "status": None, "progress_pct": None,
             "blockers": [], "risks": [], "owners": [], "next_steps": [], "period": None}
+
+
+# ---------------------------------------------------------------------------
+# Real extractor: the same function the /extract endpoint uses, against the eval world.
+# ---------------------------------------------------------------------------
+def real_extract(text, world, model=None):
+    from app.extractor import extract  # imported lazily so --placeholder needs no backend deps
+    return extract(text, world, model=model)
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +94,8 @@ def _set_score(pred, exp):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default=None, help="local model name (used once the real extractor is wired)")
+    ap.add_argument("--model", default="qwen2.5:7b", help="local model name for the real extractor")
+    ap.add_argument("--placeholder", action="store_true", help="use the empty-returning stub (no model needed)")
     args = ap.parse_args()
 
     world, rows = load_dataset()
@@ -91,8 +103,19 @@ def main():
     totals = {f: [] for f in fields}
     by_lang = {"en": {f: [] for f in fields}, "ja": {f: [] for f in fields}}
 
-    for ex in rows:
-        pred = placeholder_extract(ex["input_text"], world, args.model)
+    extractor = placeholder_extract if args.placeholder else real_extract
+    label = "PLACEHOLDER (returns empties)" if args.placeholder else args.model
+
+    for i, ex in enumerate(rows, 1):
+        try:
+            pred = extractor(ex["input_text"], world, args.model)
+        except Exception as e:  # most likely Ollama unreachable; fail clearly, not with a trace
+            print(f"\nExtractor failed on {ex['id']} ({i}/{len(rows)}): {e}", file=sys.stderr)
+            print("If using the real extractor, ensure `ollama serve` is running and "
+                  f"`ollama pull {args.model}` has completed. Or run with --placeholder.", file=sys.stderr)
+            raise SystemExit(1)
+        if not args.placeholder:
+            print(f"  scored {ex['id']} ({i}/{len(rows)})", file=sys.stderr)
         s = score_example(pred, ex["expected"])
         for f in fields:
             totals[f].append(s[f])
@@ -101,7 +124,7 @@ def main():
     def avg(xs):
         return sum(xs) / len(xs) if xs else 0.0
 
-    print(f"Model: {args.model or 'PLACEHOLDER (returns empties)'}")
+    print(f"Model: {label}")
     print(f"Examples: {len(rows)}\n")
     print(f"{'field':<14}{'overall':>9}{'EN':>8}{'JA':>8}")
     print("-" * 39)
@@ -112,8 +135,8 @@ def main():
     ja = avg([v for f in fields for v in by_lang['ja'][f]])
     print("-" * 39)
     print(f"{'AVERAGE':<14}{overall:>9.2f}{en:>8.2f}{ja:>8.2f}")
-    print("\nNote: placeholder scores are near zero by design. Real numbers appear once")
-    print("the local-model extractor replaces placeholder_extract in week 2.")
+    if args.placeholder:
+        print("\nNote: placeholder scores are near zero by design. Drop --placeholder to score the real model.")
 
 
 if __name__ == "__main__":

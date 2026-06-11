@@ -109,3 +109,32 @@ class UpdateOut(BaseModel):
     blockers: list[BlockerOut] = []
     risks: list[RiskOut] = []
     next_steps: list[NextStepOut] = []
+
+
+# ---------- Extraction (week 2): text -> structured draft, nothing persisted ----------
+class ExtractRequest(BaseModel):
+    raw_text: str
+    language: str = "en"
+    model: str | None = None  # override the default local model; None uses the server default
+
+
+class ExtractDraft(BaseModel):
+    """The model's proposal, shown in the confirmation editor before saving.
+
+    Richer than what `/updates` persists: `project`/`task` are matched names (with a
+    resolved `task_id` or null), and `progress_pct`/`status`/`period`/`owners` are
+    surfaced for the human even though some live on Task, not Update.
+    """
+    project: str = "unknown"            # known project name or "unknown"
+    task: str | None = None             # known task title or null
+    task_id: int | None = None          # resolved against the live DB, null if unmatched
+    unknown_project: bool = False
+    unknown_task: bool = False
+    status: Status | None = None
+    progress_pct: int | None = None
+    blockers: list[BlockerIn] = []
+    risks: list[RiskIn] = []
+    next_steps: list[NextStepIn] = []
+    owners: list[str] = []
+    period: str | None = None
+    confidence: float = 0.0
