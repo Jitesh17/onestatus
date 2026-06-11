@@ -161,3 +161,82 @@ class ExtractDraft(BaseModel):
     owners: list[str] = []
     period: str | None = None
     confidence: float = 0.0
+
+
+# ---------- Dashboard (week 5): fixed manager KPIs, read-only ----------
+class TaskStatusCounts(BaseModel):
+    not_started: int = 0
+    in_progress: int = 0
+    blocked: int = 0
+    done: int = 0
+
+
+class SeverityCounts(BaseModel):
+    low: int = 0
+    medium: int = 0
+    high: int = 0
+
+
+class BlockerRow(BaseModel):
+    description: str
+    severity: str
+    owner: str | None = None
+    task: str | None = None
+    project: str | None = None
+
+
+class RiskRow(BaseModel):
+    description: str
+    impact: str | None = None
+    mitigation: str | None = None
+    owner: str | None = None
+    task: str | None = None
+    project: str | None = None
+
+
+class NextStepRow(BaseModel):
+    description: str
+    owner: str | None = None
+    due_date: str | None = None
+    task: str | None = None
+    project: str | None = None
+
+
+class RecentUpdateRow(BaseModel):
+    id: int
+    task: str | None = None
+    project: str | None = None
+    author: str | None = None
+    language: str
+    source: str
+    created_at: dt.datetime
+    snippet: str
+    blocker_count: int
+    risk_count: int
+    next_step_count: int
+
+
+class ProjectRollupRow(BaseModel):
+    id: int
+    name: str
+    name_ja: str | None = None
+    status: str
+    owner: str | None = None
+    task_count: int
+    avg_progress: int
+    open_blocker_count: int
+    done_task_count: int
+
+
+class DashboardOut(BaseModel):
+    totals: dict[str, int]
+    task_status_counts: TaskStatusCounts
+    overall_progress: int
+    open_blockers: int
+    open_blockers_by_severity: SeverityCounts
+    open_risks: int
+    blockers_list: list[BlockerRow] = []
+    risks_list: list[RiskRow] = []
+    recent_updates: list[RecentUpdateRow] = []
+    upcoming_next_steps: list[NextStepRow] = []
+    per_project: list[ProjectRollupRow] = []

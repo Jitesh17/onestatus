@@ -9,6 +9,8 @@ export default function App() {
   const [tasks, setTasks] = useState([]);
   const [updates, setUpdates] = useState([]);
   const [error, setError] = useState("");
+  const [view, setView] = useState("dashboard");
+  const [dashTick, setDashTick] = useState(0); // bump to refetch the dashboard after a save
 
   async function refresh() {
     try {
@@ -17,19 +19,163 @@ export default function App() {
     } catch (e) {
       setError("Cannot reach the API. Is the backend running on port 8000?");
     }
+    setDashTick(x => x + 1);
   }
   useEffect(() => { refresh(); }, []);
 
   return (
     <>
-      <div className="bar"><b>Sony OneStatus</b> &nbsp;·&nbsp; Manual entry (week 1, no AI)</div>
+      <div className="bar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span><b>Sony OneStatus</b> &nbsp;·&nbsp; Voice-first bilingual status</span>
+        <span className="tabs">
+          <button className={view === "dashboard" ? "on" : ""} onClick={() => setView("dashboard")}>Dashboard</button>
+          <button className={view === "capture" ? "on" : ""} onClick={() => setView("capture")}>Capture</button>
+        </span>
+      </div>
       <div className="wrap">
         {error && <div className="card" style={{ borderColor: "#c00", color: "#c00" }}>{error}</div>}
-        <AiUpdateForm tasks={tasks} onDone={refresh} />
-        <ProjectForm onDone={refresh} />
-        <TaskForm projects={projects} onDone={refresh} />
-        <UpdateForm tasks={tasks} onDone={refresh} />
-        <UpdatesTable updates={updates} tasks={tasks} />
+        {view === "dashboard" ? (
+          <Dashboard tick={dashTick} />
+        ) : (
+          <>
+            <AiUpdateForm tasks={tasks} onDone={refresh} />
+            <ProjectForm onDone={refresh} />
+            <TaskForm projects={projects} onDone={refresh} />
+            <UpdateForm tasks={tasks} onDone={refresh} />
+            <UpdatesTable updates={updates} tasks={tasks} />
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Manager dashboard (week 5): fixed KPIs read from GET /dashboard. Read-only.
+// ---------------------------------------------------------------------------
+const STATUS_SEG = ["not_started", "in_progress", "blocked", "done"];
+const STATUS_LABEL = { not_started: "Not started", in_progress: "In progress", blocked: "Blocked", done: "Done" };
+
+function Dashboard({ tick }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    api.dashboard().then(setD).catch(e => setErr(e.message || "Could not load dashboard."));
+  }, [tick]);
+
+  if (err) return <div className="card" style={{ borderColor: "#c00", color: "#c00" }}>{err}</div>;
+  if (!d) return <div className="card"><p className="muted">Loading dashboard…</p></div>;
+
+  const totalTasks = d.totals.tasks || 0;
+  const pct = (n) => (totalTasks ? (n / totalTasks) * 100 : 0);
+
+  return (
+    <>
+      <div className="kpis">
+        <div className="kpi"><div className="n">{d.totals.projects}</div><div className="l">Projects</div></div>
+        <div className="kpi"><div className="n">{d.totals.tasks}</div><div className="l">Tasks</div></div>
+        <div className="kpi"><div className="n">{d.overall_progress}%</div><div className="l">Overall progress</div></div>
+        <div className={"kpi" + (d.open_blockers ? " warn" : "")}><div className="n">{d.open_blockers}</div><div className="l">Open blockers</div></div>
+        <div className={"kpi" + (d.open_risks ? " warn" : "")}><div className="n">{d.open_risks}</div><div className="l">Open risks</div></div>
+      </div>
+
+      <div className="card">
+        <div className="h3">Delivery status</div>
+        <div className="segbar">
+          {STATUS_SEG.map(s => pct(d.task_status_counts[s]) > 0 &&
+            <div key={s} className={"seg s_" + s} style={{ width: pct(d.task_status_counts[s]) + "%" }}
+              title={`${STATUS_LABEL[s]}: ${d.task_status_counts[s]}`} />)}
+        </div>
+        <div className="seglegend">
+          {STATUS_SEG.map(s => (
+            <span key={s}><span className={"sw seg s_" + s} />{STATUS_LABEL[s]}: {d.task_status_counts[s]}</span>
+          ))}
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="h3">Projects</div>
+        <table>
+          <thead><tr><th>Project</th><th>Status</th><th>Progress</th><th>Tasks</th><th>Open blockers</th></tr></thead>
+          <tbody>
+            {d.per_project.map(p => (
+              <tr key={p.id}>
+                <td>{p.name}{p.name_ja && <div className="muted">{p.name_ja}</div>}</td>
+                <td><span className={"st " + p.status}>{STATUS_LABEL[p.status] || p.status}</span></td>
+                <td>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div className="progress"><div style={{ width: p.avg_progress + "%" }} /></div>
+                    <span className="muted">{p.avg_progress}%</span>
+                  </div>
+                </td>
+                <td>{p.done_task_count}/{p.task_count} done</td>
+                <td>{p.open_blocker_count > 0 ? <span className="tag blocked">{p.open_blocker_count}</span> : <span className="muted">0</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="row" style={{ alignItems: "stretch" }}>
+        <div className="card" style={{ flex: 1 }}>
+          <div className="h3">Open blockers ({d.open_blockers})</div>
+          {d.blockers_list.length === 0 ? <p className="muted">None open.</p> : (
+            <div className="feed">
+              {d.blockers_list.map((b, i) => (
+                <div key={i} className="item">
+                  <span className={"sevdot " + b.severity} />{b.description}
+                  <div className="muted">{b.severity}{b.task ? ` · ${b.task}` : ""}{b.owner ? ` · ${b.owner}` : ""}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="card" style={{ flex: 1 }}>
+          <div className="h3">Risks ({d.open_risks})</div>
+          {d.risks_list.length === 0 ? <p className="muted">None flagged.</p> : (
+            <div className="feed">
+              {d.risks_list.map((r, i) => (
+                <div key={i} className="item">
+                  {r.description}
+                  <div className="muted">{r.impact ? `impact ${r.impact}` : ""}{r.mitigation ? ` · mitigation: ${r.mitigation}` : ""}{r.task ? ` · ${r.task}` : ""}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="row" style={{ alignItems: "stretch" }}>
+        <div className="card" style={{ flex: 1 }}>
+          <div className="h3">Recent activity</div>
+          {d.recent_updates.length === 0 ? <p className="muted">No updates yet.</p> : (
+            <div className="feed">
+              {d.recent_updates.map(u => (
+                <div key={u.id} className={"item" + (u.source === "voice" ? " voice" : "")}>
+                  {u.snippet || "(no text)"}
+                  <div className="muted">
+                    {new Date(u.created_at).toLocaleDateString()} · {u.task || "(no task)"}
+                    {u.author ? ` · ${u.author}` : ""} · {u.source}{u.language === "ja" ? " · JA" : ""}
+                    {u.blocker_count ? ` · ${u.blocker_count} blocker(s)` : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="card" style={{ flex: 1 }}>
+          <div className="h3">Upcoming next steps</div>
+          {d.upcoming_next_steps.length === 0 ? <p className="muted">Nothing queued.</p> : (
+            <div className="feed">
+              {d.upcoming_next_steps.map((n, i) => (
+                <div key={i} className="item">
+                  {n.description}
+                  <div className="muted">{n.due_date ? `due ${n.due_date}` : "no date"}{n.owner ? ` · ${n.owner}` : ""}{n.task ? ` · ${n.task}` : ""}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </>
   );

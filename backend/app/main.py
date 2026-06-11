@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database import Base, engine
 from . import models  # noqa: F401  (import registers models on Base before create_all)
-from .routers import projects, tasks, updates, extract, transcribe
+from .routers import projects, tasks, updates, extract, transcribe, dashboard
 
 app = FastAPI(title="Sony OneStatus API", version="0.1.0")
 
@@ -28,6 +28,7 @@ app.include_router(tasks.router)
 app.include_router(updates.router)
 app.include_router(extract.router)
 app.include_router(transcribe.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/health", tags=["meta"])

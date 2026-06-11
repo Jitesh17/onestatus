@@ -35,4 +35,5 @@ export const api = {
   createUpdate: (data) => req("/updates", { method: "POST", body: JSON.stringify(data) }),
   extractUpdate: (data) => req("/extract", { method: "POST", body: JSON.stringify(data) }),
   transcribe: (formData) => upload("/transcribe", formData),
+  dashboard: () => req("/dashboard"),
 };
