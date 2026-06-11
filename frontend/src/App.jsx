@@ -11,6 +11,12 @@ export default function App() {
   const [error, setError] = useState("");
   const [view, setView] = useState("dashboard");
   const [dashTick, setDashTick] = useState(0); // bump to refetch the dashboard after a save
+  const [theme, setTheme] = useState(() => localStorage.getItem("onestatus.theme") || "light");
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("onestatus.theme", theme);
+  }, [theme]);
 
   async function refresh() {
     try {
@@ -30,10 +36,14 @@ export default function App() {
         <span className="tabs">
           <button className={view === "dashboard" ? "on" : ""} onClick={() => setView("dashboard")}>Dashboard</button>
           <button className={view === "capture" ? "on" : ""} onClick={() => setView("capture")}>Capture</button>
+          <button className="themetoggle" title="Switch theme"
+            onClick={() => setTheme(t => (t === "light" ? "dark" : "light"))}>
+            {theme === "light" ? "🌙" : "☀️"}
+          </button>
         </span>
       </div>
       <div className="wrap">
-        {error && <div className="card" style={{ borderColor: "#c00", color: "#c00" }}>{error}</div>}
+        {error && <div className="card" style={{ borderColor: "var(--danger)", color: "var(--danger)" }}>{error}</div>}
         {view === "dashboard" ? (
           <Dashboard tick={dashTick} />
         ) : (
@@ -116,7 +126,7 @@ function Dashboard({ tick }) {
     } catch (e) { setErr("Microphone unavailable: " + (e.message || e)); }
   }
 
-  if (err && !d) return <div className="card" style={{ borderColor: "#c00", color: "#c00" }}>{err}</div>;
+  if (err && !d) return <div className="card" style={{ borderColor: "var(--danger)", color: "var(--danger)" }}>{err}</div>;
   if (!d) return <div className="card"><p className="muted">Loading dashboard…</p></div>;
 
   const totalTasks = d.totals.tasks || 0;
@@ -145,7 +155,7 @@ function Dashboard({ tick }) {
         </div>
         {config && (
           <div className="activecfg">
-            <span className="tag" style={{ background: "#ffe9c2" }}>view: {config.summary || "custom"}</span>
+            <span className="tag view">view: {config.summary || "custom"}</span>
             {chipBits.map((b, i) => <span key={i} className="tag">{b}</span>)}
             <button className="link" onClick={loadFull}>clear</button>
             <span style={{ flex: 1 }} />
@@ -164,7 +174,7 @@ function Dashboard({ tick }) {
             ))}
           </div>
         )}
-        {err && <p className="muted" style={{ color: "#c00", margin: "6px 0 0" }}>{err}</p>}
+        {err && <p className="muted" style={{ color: "var(--danger)", margin: "6px 0 0" }}>{err}</p>}
       </div>
 
       <div className="kpis">
@@ -178,11 +188,11 @@ function Dashboard({ tick }) {
       {vis("trends") && <div className="row" style={{ alignItems: "stretch" }}>
         <div className="card" style={{ flex: 1 }}>
           <div className="h3">Progress over time</div>
-          <TrendChart points={d.trends?.progress} max={100} unit="%" color="#2e7d32" />
+          <TrendChart points={d.trends?.progress} max={100} unit="%" color="var(--trend-good)" />
         </div>
         <div className="card" style={{ flex: 1 }}>
           <div className="h3">Open blockers over time</div>
-          <TrendChart points={d.trends?.blockers} unit="" color="#c0392b" step />
+          <TrendChart points={d.trends?.blockers} unit="" color="var(--danger)" step />
         </div>
       </div>}
 
@@ -291,7 +301,7 @@ function Dashboard({ tick }) {
 // Dependency-free inline SVG line chart (trends sprint). `step` draws a step line
 // (right then down/up) for count series; otherwise a straight polyline. Scales to
 // `max` when given (progress 0-100), else to the series peak.
-function TrendChart({ points, max, unit = "", color = "#1f3864", step = false }) {
+function TrendChart({ points, max, unit = "", color = "var(--accent)", step = false }) {
   if (!points || points.length === 0) return <p className="muted">No history yet.</p>;
   const W = 320, H = 96, PAD = 6;
   const hi = max ?? Math.max(...points.map(p => p.value), 1);
@@ -306,9 +316,10 @@ function TrendChart({ points, max, unit = "", color = "#1f3864", step = false })
   return (
     <div className="trend">
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-        <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="#ececf0" />
-        <polyline points={coords.join(" ")} fill="none" stroke={color} strokeWidth="2" />
-        <circle cx={x(points.length - 1)} cy={y(last.value)} r="3" fill={color} />
+        {/* CSS vars only work reliably in SVG via style, not presentation attributes */}
+        <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} style={{ stroke: "var(--border-soft)" }} />
+        <polyline points={coords.join(" ")} fill="none" strokeWidth="2" style={{ stroke: color }} />
+        <circle cx={x(points.length - 1)} cy={y(last.value)} r="3" style={{ fill: color }} />
       </svg>
       <div className="trendmeta">
         <span className="muted">{points[0].date}</span>
@@ -541,14 +552,14 @@ function AiUpdateForm({ tasks, onDone }) {
   const dropItem = (key, i) => setDraft(d => ({ ...d, [key]: d[key].filter((_, j) => j !== i) }));
 
   return (
-    <div className="card" style={{ borderColor: "#1f3864" }}>
+    <div className="card" style={{ borderColor: "var(--accent)" }}>
       <h2>Add update by voice or text (AI)</h2>
       <div className="row" style={{ alignItems: "center", marginBottom: 6 }}>
         <button onClick={toggleRecord} disabled={transcribing}
           style={{ marginTop: 0, background: recording ? "#c0392b" : "#1f3864" }}>
           {recording ? "■ Stop recording" : "● Record"}
         </button>
-        <label style={{ margin: 0, fontWeight: 400, color: "#777" }}>
+        <label style={{ margin: 0, fontWeight: 400, color: "var(--muted)" }}>
           or upload audio:&nbsp;
           <input type="file" accept="audio/*" onChange={onPickFile} disabled={transcribing}
             style={{ width: "auto", display: "inline-block", padding: 2, border: 0 }} />
@@ -570,10 +581,10 @@ function AiUpdateForm({ tasks, onDone }) {
       <button onClick={extract} disabled={busy || !text.trim()}>
         {busy ? "Extracting..." : "Extract"}
       </button>
-      {err && <p style={{ color: "#c00", marginBottom: 0 }}>{err}</p>}
+      {err && <p style={{ color: "var(--danger)", marginBottom: 0 }}>{err}</p>}
 
       {draft && (
-        <div style={{ marginTop: 16, borderTop: "1px solid #ececf0", paddingTop: 12 }}>
+        <div style={{ marginTop: 16, borderTop: "1px solid var(--border-soft)", paddingTop: 12 }}>
           <div className="row" style={{ alignItems: "center" }}>
             <h3 style={{ margin: 0, fontSize: 15 }}>Confirm the extracted update</h3>
             <span className="muted">model confidence: {Math.round((draft.confidence || 0) * 100)}%</span>
@@ -679,7 +690,7 @@ function DraftList({ title, items, render, onAdd, onDrop }) {
           <button onClick={() => onDrop(i)} style={{ background: "#c0392b", marginTop: 0, padding: "7px 10px" }}>×</button>
         </div>
       ))}
-      <button onClick={onAdd} style={{ background: "#eee", color: "#333", marginTop: 4, padding: "5px 10px" }}>+ add</button>
+      <button onClick={onAdd} style={{ background: "var(--chip-bg)", color: "var(--text)", marginTop: 4, padding: "5px 10px" }}>+ add</button>
     </div>
   );
 }
