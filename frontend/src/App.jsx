@@ -176,15 +176,18 @@ function AiUpdateForm({ tasks, onDone }) {
   }
 
   async function confirm() {
+    // The draft is lenient; the strict /updates save needs a real severity and an ISO date
+    // (or null). The vague due_date stays visible in the editor but is dropped on save.
+    const isISO = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
     const payload = {
       task_id: draft.task_id ?? null,
       author: author || null,
       language,
       raw_text: text,
       source: "text",
-      blockers: draft.blockers,
+      blockers: draft.blockers.map(b => ({ ...b, severity: b.severity || "medium", status: b.status || "open" })),
       risks: draft.risks,
-      next_steps: draft.next_steps,
+      next_steps: draft.next_steps.map(n => ({ ...n, due_date: isISO(n.due_date) ? n.due_date : null })),
     };
     await api.createUpdate(payload);
     setText(""); setAuthor(""); setDraft(null); setErr("");

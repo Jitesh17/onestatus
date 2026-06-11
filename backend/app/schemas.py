@@ -112,6 +112,22 @@ class UpdateOut(BaseModel):
 
 
 # ---------- Extraction (week 2): text -> structured draft, nothing persisted ----------
+# Draft-nested types are deliberately LENIENT: the model may leave severity unset or emit a
+# vague due_date ("Friday", "金曜日"). The human resolves these in the editor before the strict
+# BlockerIn / NextStepIn validate on the POST /updates save.
+class BlockerDraft(BaseModel):
+    description: str
+    severity: Severity | None = None
+    owner: str | None = None
+    status: str = "open"
+
+
+class NextStepDraft(BaseModel):
+    description: str
+    owner: str | None = None
+    due_date: str | None = None  # free text; may be ISO, "Friday", or "金曜日"
+
+
 class ExtractRequest(BaseModel):
     raw_text: str
     language: str = "en"
@@ -132,9 +148,9 @@ class ExtractDraft(BaseModel):
     unknown_task: bool = False
     status: Status | None = None
     progress_pct: int | None = None
-    blockers: list[BlockerIn] = []
+    blockers: list[BlockerDraft] = []
     risks: list[RiskIn] = []
-    next_steps: list[NextStepIn] = []
+    next_steps: list[NextStepDraft] = []
     owners: list[str] = []
     period: str | None = None
     confidence: float = 0.0

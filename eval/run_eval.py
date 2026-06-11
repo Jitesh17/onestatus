@@ -5,11 +5,13 @@ the eval world. Pass --placeholder to run the empty-returning stub instead (usef
 Ollama is not available and you just want to see the scoring format).
 
 Usage:
-    python eval/run_eval.py                      # real extractor, default model
-    python eval/run_eval.py --model qwen2.5:7b   # real extractor, explicit model
-    python eval/run_eval.py --placeholder        # stub, no model needed
+    python eval/run_eval.py                          # real extractor, default model, 1 run
+    python eval/run_eval.py --model qwen2.5:14b       # explicit model
+    python eval/run_eval.py --runs 3                  # average 3 runs/example (smooths noise)
+    python eval/run_eval.py --runs 3 --errors         # also list every field that scored < 1.0
+    python eval/run_eval.py --placeholder             # stub, no model needed
 """
-import argparse, json, os, sys, difflib
+import argparse, json, os, sys, time, difflib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Make backend/app importable so the eval uses the exact production extractor.
@@ -92,51 +94,101 @@ def _set_score(pred, exp):
     return len(ep & pp) / len(ep)
 
 
+FIELDS = ["project", "task", "status", "progress_pct", "blockers", "risks", "next_steps", "owners"]
+
+
+def _avg(xs):
+    return sum(xs) / len(xs) if xs else 0.0
+
+
+def _stdev(xs):
+    if len(xs) < 2:
+        return 0.0
+    m = _avg(xs)
+    return (sum((x - m) ** 2 for x in xs) / (len(xs) - 1)) ** 0.5
+
+
+def _fmt_field(pred, exp, f):
+    """Short, readable predicted-vs-expected for one field (used by --errors)."""
+    def short(v):
+        if isinstance(v, list):
+            return "[" + "; ".join((i.get("description", "") if isinstance(i, dict) else str(i))[:40] for i in v) + "]"
+        return str(v)
+    return f"{f}: expected={short(exp.get(f))!r}  got={short(pred.get(f))!r}"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="qwen2.5:7b", help="local model name for the real extractor")
+    ap.add_argument("--runs", type=int, default=1, help="extractions per example; per-field scores are averaged (smooths temp-0 noise)")
+    ap.add_argument("--errors", action="store_true", help="after scoring, list every example/field that scored < 1.0 (uses the last run)")
     ap.add_argument("--placeholder", action="store_true", help="use the empty-returning stub (no model needed)")
     args = ap.parse_args()
 
     world, rows = load_dataset()
-    fields = ["project", "task", "status", "progress_pct", "blockers", "risks", "next_steps", "owners"]
-    totals = {f: [] for f in fields}
-    by_lang = {"en": {f: [] for f in fields}, "ja": {f: [] for f in fields}}
+    totals = {f: [] for f in FIELDS}                                   # per-example mean scores
+    by_lang = {"en": {f: [] for f in FIELDS}, "ja": {f: [] for f in FIELDS}}
+    spread = {f: [] for f in FIELDS}                                   # per-example std across runs
+    failures = []                                                     # (id, lang, [field-strings]) from last run
 
     extractor = placeholder_extract if args.placeholder else real_extract
     label = "PLACEHOLDER (returns empties)" if args.placeholder else args.model
+    started = time.time()
 
     for i, ex in enumerate(rows, 1):
-        try:
-            pred = extractor(ex["input_text"], world, args.model)
-        except Exception as e:  # most likely Ollama unreachable; fail clearly, not with a trace
-            print(f"\nExtractor failed on {ex['id']} ({i}/{len(rows)}): {e}", file=sys.stderr)
-            print("If using the real extractor, ensure `ollama serve` is running and "
-                  f"`ollama pull {args.model}` has completed. Or run with --placeholder.", file=sys.stderr)
-            raise SystemExit(1)
+        run_scores = {f: [] for f in FIELDS}
+        last_pred = None
+        for r in range(args.runs):
+            try:
+                pred = extractor(ex["input_text"], world, args.model)
+            except Exception as e:  # most likely Ollama unreachable; fail clearly, not with a trace
+                print(f"\nExtractor failed on {ex['id']} ({i}/{len(rows)}): {e}", file=sys.stderr)
+                print("If using the real extractor, ensure `ollama serve` is running and "
+                      f"`ollama pull {args.model}` has completed. Or run with --placeholder.", file=sys.stderr)
+                raise SystemExit(1)
+            last_pred = pred
+            s = score_example(pred, ex["expected"])
+            for f in FIELDS:
+                run_scores[f].append(s[f])
         if not args.placeholder:
-            print(f"  scored {ex['id']} ({i}/{len(rows)})", file=sys.stderr)
-        s = score_example(pred, ex["expected"])
-        for f in fields:
-            totals[f].append(s[f])
-            by_lang[ex["language"]][f].append(s[f])
+            print(f"  scored {ex['id']} ({i}/{len(rows)}) x{args.runs}", file=sys.stderr)
+        for f in FIELDS:
+            m = _avg(run_scores[f])
+            totals[f].append(m)
+            by_lang[ex["language"]][f].append(m)
+            spread[f].append(_stdev(run_scores[f]))
+        if args.errors and last_pred is not None:
+            miss = [_fmt_field(last_pred, ex["expected"], f) for f in FIELDS
+                    if score_example(last_pred, ex["expected"])[f] < 1.0]
+            if miss:
+                failures.append((ex["id"], ex["language"], miss))
 
-    def avg(xs):
-        return sum(xs) / len(xs) if xs else 0.0
+    elapsed = time.time() - started
 
     print(f"Model: {label}")
-    print(f"Examples: {len(rows)}\n")
-    print(f"{'field':<14}{'overall':>9}{'EN':>8}{'JA':>8}")
-    print("-" * 39)
-    for f in fields:
-        print(f"{f:<14}{avg(totals[f]):>9.2f}{avg(by_lang['en'][f]):>8.2f}{avg(by_lang['ja'][f]):>8.2f}")
-    overall = avg([v for f in fields for v in totals[f]])
-    en = avg([v for f in fields for v in by_lang['en'][f]])
-    ja = avg([v for f in fields for v in by_lang['ja'][f]])
-    print("-" * 39)
+    print(f"Examples: {len(rows)} | runs/example: {args.runs} | wall: {elapsed:.1f}s"
+          f" ({elapsed / (len(rows) * args.runs):.2f}s/extraction)\n")
+    print(f"{'field':<14}{'overall':>9}{'EN':>8}{'JA':>8}{'±sd':>8}")
+    print("-" * 47)
+    for f in FIELDS:
+        print(f"{f:<14}{_avg(totals[f]):>9.2f}{_avg(by_lang['en'][f]):>8.2f}{_avg(by_lang['ja'][f]):>8.2f}{_avg(spread[f]):>8.2f}")
+    overall = _avg([v for f in FIELDS for v in totals[f]])
+    en = _avg([v for f in FIELDS for v in by_lang['en'][f]])
+    ja = _avg([v for f in FIELDS for v in by_lang['ja'][f]])
+    print("-" * 47)
     print(f"{'AVERAGE':<14}{overall:>9.2f}{en:>8.2f}{ja:>8.2f}")
+    print("\n±sd is the mean per-example std across runs: the noise floor. 0.00 = fully stable.")
     if args.placeholder:
-        print("\nNote: placeholder scores are near zero by design. Drop --placeholder to score the real model.")
+        print("Note: placeholder scores are near zero by design. Drop --placeholder to score the real model.")
+
+    if args.errors:
+        print(f"\n{'=' * 47}\nMisses (last run, fields scoring < 1.0):")
+        for eid, lang, miss in failures:
+            print(f"\n[{eid} · {lang}]")
+            for m in miss:
+                print(f"  {m}")
+        if not failures:
+            print("  none — every field scored 1.0 on the last run.")
 
 
 if __name__ == "__main__":

@@ -63,17 +63,25 @@ def _system_prompt(world):
 
 Rules:
 - Match the project and task to the known names above. Use the exact known name.
+- "task" is the task the update is primarily reporting progress on. A task mentioned only as something to do NEXT belongs in next_steps, not in "task". (e.g. "X is done, starting Y next" -> task is X, and Y is a next_step.)
 - If the update refers to a project NOT in the list, set "project" to "unknown" and "task" to null. Do not force a match.
-- Only fill a field if the update actually states it. Leave it null or [] otherwise. Never invent progress, blockers, owners, or dates.
-- "status" is one of {STATUSES} or null.
+- Do not invent facts. But DO infer status and capture next steps from how the update is phrased (see below) - those are stated, just not labeled.
+- "status" is one of {STATUSES} or null. Infer it:
+    * any update that describes ongoing work or reports any progress is "in_progress", even if it never says so ("looked into X", "got the pipeline running", "Shivam is taking over") -> in_progress;
+    * "done"/"completed"/"finished"/"signed off"/"完了"/"完了し" -> done;
+    * "blocked"/"stuck"/"waiting on"/"ブロック" -> blocked;
+    * use null ONLY when the update gives no signal of any activity at all.
 - "progress_pct" is an integer 0-100 or null. "done" implies 100.
-- Each blocker: {{"description": str, "severity": one of {SEVERITIES} or null, "owner": str or null, "status": "open" or "resolved"}}.
-- Each risk: {{"description": str, "likelihood": str or null, "impact": str or null, "mitigation": str or null, "owner": str or null}}.
-- Each next_step: {{"description": str, "owner": str or null, "due_date": str or null}}. Normalize explicit calendar dates to ISO YYYY-MM-DD; leave vague ones ("Friday") as written.
-- "owners" is the list of people the update EXPLICITLY names as doing or receiving work, matched to the known-people spelling (katakana names map to their English spelling). If no person is named in the update text, "owners" MUST be []. Never add someone just because they are on the known-people list or normally own the task.
+- A blocker is something CURRENTLY stopping or slowing the work (no approval, expired license, server booked). A risk is something that MIGHT happen later (monsoon may delay, approval may slip). Never put a risk, a mitigation, or a next step into "blockers".
+    * Each blocker: {{"description": str, "severity": one of {SEVERITIES} or null, "owner": str or null, "status": "open" or "resolved"}}.
+- A risk is a possible future problem; keep its backup plan in the risk's "mitigation", NOT in next_steps.
+    * Each risk: {{"description": str, "likelihood": str or null, "impact": str or null, "mitigation": str or null, "owner": str or null}}.
+- next_steps: the actions the update actually proposes doing next. Trigger phrases: "next", "then", "after that", "I'll", "we'll", "plan to", "going to", "should", "will", "次は", "予定", "これから", or handing work to a person; a future action counts even when it names a different known task. BUT do not invent one: if the update only describes past/current work or is vague about the future, leave next_steps []. A risk's mitigation is not a next_step.
+    * Each next_step: {{"description": str, "owner": str or null, "due_date": str or null}}. Normalize explicit calendar dates to ISO YYYY-MM-DD; leave vague ones ("Friday", "金曜日") as written.
+- "owners" lists only people whose name LITERALLY appears in this update as doing or receiving work, including the person who receives handed-off work ("hand to Neeraj"/"ニーラジさんに渡す"/"Xに依頼" -> that person). Match to the known-people spelling (katakana maps to English, e.g. ニーラジ -> Neeraj). If no person is named, "owners" MUST be []. Never add someone because they are on the known-people list or normally own the task.
 - "period" is an explicit reporting period if stated (e.g. "Week of June 8"), else null.
 - "confidence" is your 0.0-1.0 confidence that the extraction is correct. Be low when the update is vague.
-- Keep descriptions in the update's original language.
+- Keep blocker/risk/next_step descriptions in the update's original language.
 
 Return ONLY the JSON object, no prose."""
 
