@@ -8,6 +8,9 @@ from sqlalchemy import text
 
 
 # (table, column, SQL type) — nullable only; anything stricter needs a real migration tool.
+# NOTE: whole NEW tables (e.g. `people`, report-scenarios sprint) need no entry here;
+# create_all() creates missing tables fine. This list is only for columns added to
+# tables that already exist in deployed DBs.
 _COLUMNS = [
     ("updates", "status", "VARCHAR(20)"),
     ("updates", "progress_pct", "INTEGER"),

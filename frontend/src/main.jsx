@@ -102,6 +102,12 @@ style.textContent = `
   .activecfg button { margin: 0; padding: 6px 12px; }
   button.link { background: transparent; color: var(--accent); text-decoration: underline; padding: 2px 4px; margin: 0; }
   .savedviews { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  /* report scenarios: preset chips + team picker */
+  .presets { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .presets .teamsel { width: auto; padding: 4px 8px; font-size: 13px; }
+  .presetchip { background: var(--chip-bg); color: var(--accent); border: 1px solid var(--input-border);
+    border-radius: 16px; margin: 0; padding: 4px 12px; font-size: 13px; }
+  .presetchip:hover { border-color: var(--accent); }
   .viewchip { display: inline-flex; align-items: center; border: 1px solid var(--input-border); border-radius: 16px; overflow: hidden; }
   .viewchip .vname { background: var(--chip-bg); color: var(--accent); border: 0; margin: 0; padding: 4px 10px; font-size: 13px; border-radius: 0; }
   .viewchip .vx { background: var(--card); color: var(--danger); border: 0; margin: 0; padding: 4px 9px; font-size: 14px; border-radius: 0; }

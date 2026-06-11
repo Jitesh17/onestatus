@@ -110,6 +110,19 @@ class NextStep(Base):
     update: Mapped["Update"] = relationship(back_populates="next_steps")
 
 
+class Person(Base):
+    """Org roster (report-scenarios sprint). Team/department live flat on the person;
+    assignee/author/owner stay free text on the records and are matched by name at
+    aggregation time, so a person changing teams never rewrites history.
+    """
+    __tablename__ = "people"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    name_ja: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    team: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    department: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+
 class SavedView(Base):
     """A named dashboard view-config (week 6). `config` holds the ViewConfig JSON as text."""
     __tablename__ = "saved_views"

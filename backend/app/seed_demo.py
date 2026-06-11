@@ -36,7 +36,7 @@ DEMO = [
                           ("Review tool license expired", SV.medium, None, "open")],
              "risks": [("Approval slipping past mid-June endangers the September demo", "high",
                         "Escalate to Tokyo PMO weekly", None)],
-             "next_steps": [("Follow up with Tokyo PMO on data approval", "Jitesh", dt.date(2026, 6, 15))]},
+             "next_steps": [("Follow up with Tokyo PMO on data approval", "Tanaka-san", dt.date(2026, 6, 15))]},
             {"task": "Color uniformity test rig", "author": "Neeraj", "lang": "en", "source": "voice",
              "text": "Test rig about 60 percent done, wrapping up sensor mounts by Friday.",
              "next_steps": [("Finish remaining sensor mounts", "Neeraj", dt.date(2026, 6, 19))]},
@@ -103,6 +103,35 @@ HISTORY_BLOCKERS = {
 }
 
 
+# ---------- Org roster (report-scenarios sprint) ----------
+# Powers the team/person rollups and the preset team picker. Names match the free-text
+# assignee/author/owner values used above; matching is by name at aggregation time.
+ORG = [
+    ("Jitesh", None, "Display Systems", "India Software Centre"),
+    ("Neeraj", None, "Display Systems", "India Software Centre"),
+    ("Shivam", None, "Speech & Audio", "India Software Centre"),
+    ("Abhishake", None, "Speech & Audio", "India Software Centre"),
+    ("Tanaka-san", "田中さん", "Japan Liaison", "Tokyo HQ"),
+    ("Sato-san", "佐藤さん", "Japan Liaison", "Tokyo HQ"),
+]
+
+
+def seed_people(db):
+    """Idempotent by name: a person already in the table is never touched."""
+    existing = {p.name for p in db.query(models.Person).all()}
+    added = 0
+    for name, name_ja, team, dept in ORG:
+        if name in existing:
+            continue
+        db.add(models.Person(name=name, name_ja=name_ja, team=team, department=dept))
+        added += 1
+    db.commit()
+    if added:
+        print(f"Org roster seeded: {added} person(s).")
+    else:
+        print("Org roster already present, nothing added.")
+
+
 def _ago(days: int) -> dt.datetime:
     return (dt.datetime.utcnow() - dt.timedelta(days=days)).replace(
         hour=10, minute=0, second=0, microsecond=0)
@@ -139,6 +168,7 @@ def seed_history(db):
 def run():
     db = SessionLocal()
     try:
+        seed_people(db)
         existing = {p.name for p in db.query(models.Project).all()}
         added = 0
         for d in DEMO:

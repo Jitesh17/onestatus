@@ -75,6 +75,8 @@ function Dashboard({ tick }) {
   const [views, setViews] = useState([]);
   const [saveName, setSaveName] = useState("");
   const [recording, setRecording] = useState(false);
+  const [presets, setPresets] = useState({ teams: [], presets: [] });
+  const [team, setTeam] = useState("");
   const recRef = useRef(null);
 
   async function loadFull() {
@@ -85,6 +87,11 @@ function Dashboard({ tick }) {
     try { setViews(await api.listViews()); } catch { /* ignore */ }
   }
   useEffect(() => { loadFull(); refreshViews(); }, [tick]);
+  useEffect(() => {
+    api.listPresets()
+      .then(p => { setPresets(p); setTeam(p.teams[0] || ""); })
+      .catch(() => { /* chips simply don't render */ });
+  }, []);
 
   async function runCmd(text) {
     const q = (text ?? cmd).trim();
@@ -100,6 +107,18 @@ function Dashboard({ tick }) {
     setBusy(true); setErr("");
     try { const r = await api.applyView(v.config); setConfig(r.config); setD(r.dashboard); setCmd(v.name); }
     catch (e) { setErr(e.message || "Could not apply view."); }
+    finally { setBusy(false); }
+  }
+  // Preset chips: deterministic configs from the backend, applied with no LLM in the
+  // loop. The equivalent NL phrase lands in the command box so the typed path is learnable.
+  async function applyPreset(p) {
+    const fill = (v) => (typeof v === "string" ? v.replaceAll("{team}", team) : v);
+    const cfg = Object.fromEntries(Object.entries(p.config).map(([k, v]) => [k, fill(v)]));
+    setBusy(true); setErr("");
+    try {
+      const r = await api.applyView(cfg);
+      setConfig(r.config); setD(r.dashboard); setCmd(fill(p.nl_phrase));
+    } catch (e) { setErr(e.message || "Could not apply view."); }
     finally { setBusy(false); }
   }
   async function saveCurrent() {
@@ -136,6 +155,7 @@ function Dashboard({ tick }) {
   const vis = (s) => (sections.length === 0 || sections.includes(s)) && !hide.includes(s);
   const chipBits = config && [
     config.project, config.status && STATUS_LABEL[config.status], config.severity && `${config.severity} sev`,
+    config.team && `team: ${config.team}`, config.person && `person: ${config.person}`,
     config.sort && `by ${config.sort}`, config.limit && `top ${config.limit}`,
     config.days && `last ${config.days} days`,
     !config.days && config.date_from && `from ${config.date_from}`,
@@ -145,6 +165,22 @@ function Dashboard({ tick }) {
   return (
     <>
       <div className="card cmdbar">
+        {presets.presets.length > 0 && (
+          <div className="presets">
+            <span className="muted">Quick views:</span>
+            {presets.teams.length > 0 && (
+              <select className="teamsel" value={team} onChange={e => setTeam(e.target.value)} title="Team for the team presets">
+                {presets.teams.map(t => <option key={t}>{t}</option>)}
+              </select>
+            )}
+            {presets.presets.map(p => (
+              (!p.needs_team || presets.teams.length > 0) &&
+              <button key={p.id} className="presetchip" disabled={busy}
+                title={p.nl_phrase.replaceAll("{team}", team)}
+                onClick={() => applyPreset(p)}>{p.label}</button>
+            ))}
+          </div>
+        )}
         <div className="cmdrow">
           <input value={cmd} onChange={e => setCmd(e.target.value)}
             onKeyDown={e => e.key === "Enter" && runCmd()}
@@ -227,6 +263,54 @@ function Dashboard({ tick }) {
                 </td>
                 <td>{p.done_task_count}/{p.task_count} done</td>
                 <td>{p.open_blocker_count > 0 ? <span className="tag blocked">{p.open_blocker_count}</span> : <span className="muted">0</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>}
+
+      {vis("per_team") && (d.per_team?.length > 0) && <div className="card">
+        <div className="h3">Teams</div>
+        <table>
+          <thead><tr><th>Team</th><th>Department</th><th>Members</th><th>Progress</th><th>Tasks</th><th>Open blockers</th></tr></thead>
+          <tbody>
+            {d.per_team.map(t => (
+              <tr key={t.team}>
+                <td>{t.team}</td>
+                <td className="muted">{t.department || "-"}</td>
+                <td className="muted">{t.members.join(", ")}</td>
+                <td>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div className="progress"><div style={{ width: t.avg_progress + "%" }} /></div>
+                    <span className="muted">{t.avg_progress}%</span>
+                  </div>
+                </td>
+                <td>{t.done_task_count}/{t.task_count} done</td>
+                <td>{t.open_blocker_count > 0 ? <span className="tag blocked">{t.open_blocker_count}</span> : <span className="muted">0</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>}
+
+      {vis("per_person") && (d.per_person?.length > 0) && <div className="card">
+        <div className="h3">People</div>
+        <table>
+          <thead><tr><th>Person</th><th>Team</th><th>Progress</th><th>Tasks</th><th>Open blockers</th><th>Next steps</th></tr></thead>
+          <tbody>
+            {d.per_person.map(p => (
+              <tr key={p.name}>
+                <td>{p.name}</td>
+                <td className="muted">{p.team || "-"}</td>
+                <td>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div className="progress"><div style={{ width: p.avg_progress + "%" }} /></div>
+                    <span className="muted">{p.avg_progress}%</span>
+                  </div>
+                </td>
+                <td>{p.done_task_count}/{p.task_count} done</td>
+                <td>{p.open_blocker_count > 0 ? <span className="tag blocked">{p.open_blocker_count}</span> : <span className="muted">0</span>}</td>
+                <td>{p.next_step_count > 0 ? p.next_step_count : <span className="muted">0</span>}</td>
               </tr>
             ))}
           </tbody>
@@ -567,7 +651,7 @@ function AiUpdateForm({ tasks, onDone }) {
         {transcribing && <span className="muted">transcribing…</span>}
         {source === "voice" && !transcribing && <span className="tag done">from voice</span>}
       </div>
-      <label>Update text (English, Japanese, or mixed) — speak above, or type/edit here</label>
+      <label>Update text (English, Japanese, or mixed): speak above, or type/edit here</label>
       <textarea rows="3" value={text} onChange={e => setText(e.target.value)}
         placeholder="e.g. Color uniformity test rig is about 60% done, wrapping up sensor mounts by Friday." />
       <div className="row">

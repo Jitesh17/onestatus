@@ -49,18 +49,35 @@ def list_updates(db: Session):
 
 
 # ---------- World + name resolution (week 2 extraction) ----------
-# A small fixed roster for now. Owners on updates are free text; this list grounds
-# the extractor's name matching. Move to a table if people management is ever needed.
+# Fallback roster for DBs seeded before the `people` table existed (report-scenarios
+# sprint). When the table has rows, it is the source of truth for people AND teams.
 PEOPLE = ["Jitesh", "Neeraj", "Abhishake", "Shivam", "Tanaka-san", "Sato-san"]
 
 
+def people_roster(db: Session):
+    """All Person rows, ordered. Empty list when the org has never been seeded."""
+    return db.query(models.Person).order_by(models.Person.id).all()
+
+
 def build_world(db: Session):
-    """Assemble the extractor's world (projects, tasks, people) from the live DB."""
+    """Assemble the extractor's world (projects, tasks, people, teams) from the live DB.
+
+    `teams` is consumed only by the view interpreter; the extractor reads projects/people
+    and ignores the extra key.
+    """
     projects = []
     for p in db.query(models.Project).order_by(models.Project.id).all():
         tasks = [t.title for t in p.tasks]
         projects.append({"name": p.name, "name_ja": p.name_ja, "tasks": tasks})
-    return {"projects": projects, "people": PEOPLE}
+    roster = people_roster(db)
+    people = [p.name for p in roster] if roster else list(PEOPLE)
+    teams, seen = [], set()
+    for p in roster:
+        if p.team and p.team not in seen:
+            seen.add(p.team)
+            teams.append({"name": p.team,
+                          "members": [m.name for m in roster if m.team == p.team]})
+    return {"projects": projects, "people": people, "teams": teams}
 
 
 def resolve_task_id(db: Session, project_name: str | None, task_title: str | None):
@@ -167,11 +184,40 @@ def _effective_range(config: dict | None):
     return start, end
 
 
+def _assignee_scope(db: Session, config: dict | None):
+    """Predicate(task) for the config's team/person filters, or None when neither is set.
+
+    Team resolves to the member-name set from the `people` table; matching against the
+    free-text Task.assignee is case-insensitive. An unknown team yields an empty set
+    (nothing matches), which is honest: the filter was asked for and found nothing.
+    """
+    config = config or {}
+    team = config.get("team")
+    person = config.get("person")
+    if not team and not person:
+        return None
+    members = None
+    if team:
+        members = {p.name.lower() for p in people_roster(db)
+                   if p.team and p.team.lower() == str(team).lower()}
+
+    def in_scope(task):
+        a = (task.assignee or "").lower()
+        if person and a != str(person).lower():
+            return False
+        if members is not None and a not in members:
+            return False
+        return True
+
+    return in_scope
+
+
 def dashboard_metrics(db: Session, config: dict | None = None):
     """Aggregate the fixed manager KPIs. With a week-6 `config`, focus/sort/limit the data:
-      config = {project, status, severity, sort, limit, days, date_from, date_to}
+      config = {project, status, severity, team, person, sort, limit, days, date_from, date_to}
       (None/absent = no filter).
-    A project/status filter narrows which projects and tasks are counted; severity filters the
+    A project/status filter narrows which projects and tasks are counted; team/person narrow
+    tasks by assignee (and prune projects left with no in-scope tasks); severity filters the
     blocker list; sort/limit reorder and cap the lists. `sections` is honored by the UI.
     A date range scopes the EVENT lists (activity, blockers, risks, next steps) and the trend
     axis; task/project counts and progress stay whole-world because they describe current STATE,
@@ -184,12 +230,17 @@ def dashboard_metrics(db: Session, config: dict | None = None):
     sort = config.get("sort")
     limit = config.get("limit")
     range_start, range_end = _effective_range(config)
+    scope = _assignee_scope(db, config)
 
     projects = [p for p in db.query(models.Project).order_by(models.Project.id).all()
                 if not proj_f or p.name == proj_f]
     proj_ids = {p.id for p in projects}
     tasks = [t for t in db.query(models.Task).all()
              if t.project_id in proj_ids and (not status_f or t.status.value == status_f)]
+    if scope:
+        tasks = [t for t in tasks if scope(t)]
+        scoped_proj_ids = {t.project_id for t in tasks}
+        projects = [p for p in projects if p.id in scoped_proj_ids]
     task_ids = {t.id for t in tasks}
     # An update is in scope when its task is in scope (project/status filters apply via the task).
     updates = [u for u in list_updates(db) if u.task_id in task_ids]
@@ -239,7 +290,8 @@ def dashboard_metrics(db: Session, config: dict | None = None):
 
     per_project = []
     for p in projects:
-        ptasks = [t for t in p.tasks if not status_f or t.status.value == status_f]
+        ptasks = [t for t in p.tasks
+                  if (not status_f or t.status.value == status_f) and (not scope or scope(t))]
         open_blk = sum(
             1 for t in ptasks for u in t.updates for b in u.blockers
             if b.status == "open" and (not sev_f or b.severity.value == sev_f)
@@ -253,6 +305,74 @@ def dashboard_metrics(db: Session, config: dict | None = None):
         })
     if sort == "progress":
         per_project.sort(key=lambda p: p["avg_progress"], reverse=True)
+
+    # Team and person rollups (report-scenarios sprint). Rows come from the org roster so
+    # the report mirrors the org chart, not just whoever happens to hold a task right now.
+    # Counting runs over the already-scoped `tasks` (and the range-scoped `updates` for the
+    # owner-matched signals), so all the filters above apply here too.
+    roster = people_roster(db)
+    by_assignee: dict[str, list] = {}
+    for t in tasks:
+        by_assignee.setdefault((t.assignee or "").lower(), []).append(t)
+
+    team_f, person_f = config.get("team"), config.get("person")
+    per_team, seen_teams = [], set()
+    for member in roster:
+        if not member.team or member.team in seen_teams:
+            continue
+        if team_f and member.team.lower() != str(team_f).lower():
+            continue
+        seen_teams.add(member.team)
+        team_members = [m for m in roster if m.team == member.team]
+        ttasks = [t for m in team_members for t in by_assignee.get(m.name.lower(), [])]
+        open_blk = sum(
+            1 for t in ttasks for u in t.updates for b in u.blockers
+            if b.status == "open" and (not sev_f or b.severity.value == sev_f)
+        )
+        per_team.append({
+            "team": member.team, "department": member.department,
+            "members": [m.name for m in team_members],
+            "task_count": len(ttasks),
+            "done_task_count": sum(1 for t in ttasks if t.status.value == "done"),
+            "avg_progress": round(sum(t.progress_pct for t in ttasks) / len(ttasks)) if ttasks else 0,
+            "open_blocker_count": open_blk,
+        })
+
+    # Every roster member appears even with zero tasks (a manager wants to see idle people);
+    # assignees missing from the roster get a team-less row so no work disappears. A
+    # team/person focus narrows the rows to that team's members / that one person.
+    roster_names = {p.name.lower() for p in roster}
+    person_rows = [(p.name, p.team) for p in roster
+                   if (not team_f or (p.team or "").lower() == str(team_f).lower())
+                   and (not person_f or p.name.lower() == str(person_f).lower())]
+    unknown: dict[str, str] = {}
+    for t in tasks:
+        a = (t.assignee or "").lower()
+        if a and a not in roster_names and a not in unknown:
+            unknown[a] = t.assignee
+    person_rows += [(name, None) for name in unknown.values()]
+
+    per_person = []
+    for name, team in person_rows:
+        key = name.lower()
+        own = by_assignee.get(key, [])
+        # Blockers touching this person: open ones on their own tasks, plus any open blocker
+        # they own elsewhere. Dedup by id since both paths can see the same row.
+        blk_ids = {b.id for t in own for u in t.updates for b in u.blockers
+                   if b.status == "open" and (not sev_f or b.severity.value == sev_f)}
+        blk_ids |= {b.id for u in updates for b in u.blockers
+                    if b.status == "open" and (b.owner or "").lower() == key
+                    and (not sev_f or b.severity.value == sev_f)}
+        per_person.append({
+            "name": name, "team": team,
+            "task_count": len(own),
+            "done_task_count": sum(1 for t in own if t.status.value == "done"),
+            "avg_progress": round(sum(t.progress_pct for t in own) / len(own)) if own else 0,
+            "open_blocker_count": len(blk_ids),
+            "next_step_count": sum(1 for u in updates for n in u.next_steps
+                                   if (n.owner or "").lower() == key),
+        })
+    per_person.sort(key=lambda r: r["task_count"], reverse=True)
 
     # limit caps the list lengths; default recent cap still applies.
     cap = limit if (isinstance(limit, int) and limit > 0) else None
@@ -270,6 +390,8 @@ def dashboard_metrics(db: Session, config: dict | None = None):
         "recent_updates": recent[:recent_cap],
         "upcoming_next_steps": upcoming[:cap] if cap else upcoming[:RECENT_LIMIT],
         "per_project": per_project,
+        "per_team": per_team,
+        "per_person": per_person,
         "trends": trend_series(db, config),
     }
 
@@ -288,19 +410,21 @@ def trend_series(db: Session, config: dict | None = None):
       snapshots at all contributes its current Task.progress_pct as a flat line (legacy rows).
     blockers: per day, max(0, opens<=day - resolves<=day), where each blocker row is an open or
       resolve event dated by its update's created_at (no blocker identity tracking; documented).
-    Respects the config's project/status focus and date range. Axis capped at ~TREND_MAX_POINTS
+    Respects the config's project/status/team/person focus and date range. Axis capped at ~TREND_MAX_POINTS
     by sampling; the final day is always included.
     """
     config = config or {}
     proj_f = config.get("project")
     status_f = config.get("status")
     range_start, range_end = _effective_range(config)
+    scope = _assignee_scope(db, config)
 
     projects = [p for p in db.query(models.Project).order_by(models.Project.id).all()
                 if not proj_f or p.name == proj_f]
     proj_ids = {p.id for p in projects}
     tasks = [t for t in db.query(models.Task).all()
-             if t.project_id in proj_ids and (not status_f or t.status.value == status_f)]
+             if t.project_id in proj_ids and (not status_f or t.status.value == status_f)
+             and (not scope or scope(t))]
     task_ids = {t.id for t in tasks}
     # All history for the in-scope tasks: carry-forward needs snapshots from BEFORE the range
     # start, so the date range trims the axis below, not this list.

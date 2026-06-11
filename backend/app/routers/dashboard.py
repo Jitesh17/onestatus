@@ -7,7 +7,7 @@ and return the filtered dashboard; POST /dashboard/apply — apply an explicit/s
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from .. import crud, schemas
+from .. import crud, presets, schemas
 from ..database import get_db
 from ..view_interpreter import interpret_view, ExtractorError
 
@@ -17,6 +17,12 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 @router.get("", response_model=schemas.DashboardOut)
 def get_dashboard(db: Session = Depends(get_db)):
     return crud.dashboard_metrics(db)
+
+
+@router.get("/presets", response_model=schemas.PresetsOut)
+def list_presets(db: Session = Depends(get_db)):
+    """Selectable report scenarios plus the team names for the picker (report-scenarios)."""
+    return presets.get_presets(db)
 
 
 @router.post("/configure", response_model=schemas.ConfiguredDashboard)

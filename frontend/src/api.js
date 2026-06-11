@@ -38,6 +38,7 @@ export const api = {
   dashboard: () => req("/dashboard"),
   configureDashboard: (data) => req("/dashboard/configure", { method: "POST", body: JSON.stringify(data) }),
   applyView: (config) => req("/dashboard/apply", { method: "POST", body: JSON.stringify({ config }) }),
+  listPresets: () => req("/dashboard/presets"),
   listViews: () => req("/views"),
   saveView: (data) => req("/views", { method: "POST", body: JSON.stringify(data) }),
   deleteView: (id) => req(`/views/${id}`, { method: "DELETE" }),

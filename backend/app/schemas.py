@@ -232,6 +232,26 @@ class ProjectRollupRow(BaseModel):
     done_task_count: int
 
 
+class TeamRollupRow(BaseModel):
+    team: str
+    department: str | None = None
+    members: list[str] = []
+    task_count: int
+    done_task_count: int
+    avg_progress: int
+    open_blocker_count: int
+
+
+class PersonRollupRow(BaseModel):
+    name: str
+    team: str | None = None               # null for assignees missing from the roster
+    task_count: int
+    done_task_count: int
+    avg_progress: int
+    open_blocker_count: int
+    next_step_count: int                  # owner-matched: the workload signal
+
+
 class TrendPoint(BaseModel):
     date: str                             # ISO day
     value: int
@@ -254,6 +274,8 @@ class DashboardOut(BaseModel):
     recent_updates: list[RecentUpdateRow] = []
     upcoming_next_steps: list[NextStepRow] = []
     per_project: list[ProjectRollupRow] = []
+    per_team: list[TeamRollupRow] = []
+    per_person: list[PersonRollupRow] = []
     trends: Trends = Trends()
 
 
@@ -262,6 +284,8 @@ class ViewConfig(BaseModel):
     project: str | None = None
     status: str | None = None
     severity: str | None = None
+    team: str | None = None           # roster team name; scopes tasks by member assignees
+    person: str | None = None         # roster (or free-text) name; scopes tasks by assignee
     sections: list[str] = []          # [] = all; else show only these
     hide: list[str] = []              # sections to remove (subtractive intent, e.g. "hide risks")
     sort: str | None = None           # severity | recent | progress | due
@@ -285,6 +309,21 @@ class ApplyRequest(BaseModel):
 class ConfiguredDashboard(BaseModel):
     config: ViewConfig
     dashboard: DashboardOut
+
+
+class PresetOut(BaseModel):
+    """A selectable report scenario: a deterministic ViewConfig plus the NL phrase that
+    would produce it, so managers learn the typed path while clicking chips."""
+    id: str
+    label: str
+    nl_phrase: str
+    config: ViewConfig
+    needs_team: bool = False          # config contains a {team} placeholder to substitute
+
+
+class PresetsOut(BaseModel):
+    teams: list[str] = []
+    presets: list[PresetOut] = []
 
 
 class SavedViewIn(BaseModel):
