@@ -128,6 +128,13 @@ class NextStepDraft(BaseModel):
     due_date: str | None = None  # free text; may be ISO, "Friday", or "金曜日"
 
 
+class TranscriptOut(BaseModel):
+    """Result of POST /transcribe (week 4). The text feeds the existing extract flow."""
+    text: str
+    language: str
+    duration: float
+
+
 class ExtractRequest(BaseModel):
     raw_text: str
     language: str = "en"

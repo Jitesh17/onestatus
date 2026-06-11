@@ -15,6 +15,17 @@ async function req(path, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 
+// Multipart upload (audio). Do NOT set Content-Type: the browser adds the boundary.
+async function upload(path, formData) {
+  const res = await fetch(base + path, { method: "POST", body: formData });
+  if (!res.ok) {
+    let detail = "";
+    try { detail = (await res.json())?.detail || ""; } catch { /* non-JSON body */ }
+    throw new Error(detail || `${res.status} ${res.statusText}`);
+  }
+  return res.json();
+}
+
 export const api = {
   listProjects: () => req("/projects"),
   createProject: (data) => req("/projects", { method: "POST", body: JSON.stringify(data) }),
@@ -23,4 +34,5 @@ export const api = {
   listUpdates: () => req("/updates"),
   createUpdate: (data) => req("/updates", { method: "POST", body: JSON.stringify(data) }),
   extractUpdate: (data) => req("/extract", { method: "POST", body: JSON.stringify(data) }),
+  transcribe: (formData) => upload("/transcribe", formData),
 };

@@ -91,6 +91,7 @@ docker-compose.yml
 | GET / POST | /tasks | list / create tasks (GET supports ?project_id=) |
 | GET / POST | /updates | list / create status updates with nested items |
 | POST | /extract | (week 2) text → structured draft via local LLM; persists nothing |
+| POST | /transcribe | (week 4) audio (multipart) → transcript via local faster-whisper; persists nothing |
 
 ## Coming next (per the build plan)
 

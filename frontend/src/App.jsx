@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 
 const STATUS = ["not_started", "in_progress", "blocked", "done"];
@@ -150,9 +150,10 @@ function UpdateForm({ tasks, onDone }) {
 }
 
 // ---------------------------------------------------------------------------
-// AI flow (week 2): type free-form text -> local LLM proposes a structured draft
-// -> human edits the confirmation blocks -> save through the existing POST /updates.
-// Nothing is saved until "Confirm & save".
+// AI flow (week 2-4): speak OR type a free-form update -> (week 4) transcribe via
+// local Whisper -> local LLM proposes a structured draft -> human edits the
+// confirmation blocks -> save through the existing POST /updates. Nothing is saved
+// until "Confirm & save".
 // ---------------------------------------------------------------------------
 function AiUpdateForm({ tasks, onDone }) {
   const [text, setText] = useState("");
@@ -161,6 +162,54 @@ function AiUpdateForm({ tasks, onDone }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [draft, setDraft] = useState(null); // null = no proposal yet
+  const [source, setSource] = useState("text"); // flips to "voice" when text came from audio
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const recorderRef = useRef(null);
+
+  // Send an audio Blob/File to /transcribe and load the transcript into the textarea.
+  async function sendAudio(blob) {
+    setTranscribing(true); setErr("");
+    try {
+      const fd = new FormData();
+      fd.append("file", blob, blob.name || "clip.webm");
+      const r = await api.transcribe(fd);
+      setText(t => (t ? t + " " : "") + r.text);
+      if (r.language === "en" || r.language === "ja") setLanguage(r.language);
+      setSource("voice");
+    } catch (e) {
+      setErr(e.message || "Transcription failed.");
+    } finally {
+      setTranscribing(false);
+    }
+  }
+
+  async function toggleRecord() {
+    if (recording) { recorderRef.current?.stop(); return; }
+    setErr("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      const chunks = [];
+      rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+      rec.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        setRecording(false);
+        sendAudio(new Blob(chunks, { type: rec.mimeType || "audio/webm" }));
+      };
+      recorderRef.current = rec;
+      rec.start();
+      setRecording(true);
+    } catch (e) {
+      setErr("Microphone unavailable: " + (e.message || e));
+    }
+  }
+
+  function onPickFile(e) {
+    const f = e.target.files?.[0];
+    if (f) sendAudio(f);
+    e.target.value = ""; // allow re-picking the same file
+  }
 
   async function extract() {
     if (!text.trim()) return;
@@ -175,6 +224,10 @@ function AiUpdateForm({ tasks, onDone }) {
     }
   }
 
+  function reset() {
+    setText(""); setAuthor(""); setDraft(null); setErr(""); setSource("text");
+  }
+
   async function confirm() {
     // The draft is lenient; the strict /updates save needs a real severity and an ISO date
     // (or null). The vague due_date stays visible in the editor but is dropped on save.
@@ -184,13 +237,13 @@ function AiUpdateForm({ tasks, onDone }) {
       author: author || null,
       language,
       raw_text: text,
-      source: "text",
+      source, // "voice" if the text came from audio, else "text"
       blockers: draft.blockers.map(b => ({ ...b, severity: b.severity || "medium", status: b.status || "open" })),
       risks: draft.risks,
       next_steps: draft.next_steps.map(n => ({ ...n, due_date: isISO(n.due_date) ? n.due_date : null })),
     };
     await api.createUpdate(payload);
-    setText(""); setAuthor(""); setDraft(null); setErr("");
+    reset();
     onDone();
   }
 
@@ -203,8 +256,21 @@ function AiUpdateForm({ tasks, onDone }) {
 
   return (
     <div className="card" style={{ borderColor: "#1f3864" }}>
-      <h2>Add update from text (AI)</h2>
-      <label>Update text (English, Japanese, or mixed)</label>
+      <h2>Add update by voice or text (AI)</h2>
+      <div className="row" style={{ alignItems: "center", marginBottom: 6 }}>
+        <button onClick={toggleRecord} disabled={transcribing}
+          style={{ marginTop: 0, background: recording ? "#c0392b" : "#1f3864" }}>
+          {recording ? "■ Stop recording" : "● Record"}
+        </button>
+        <label style={{ margin: 0, fontWeight: 400, color: "#777" }}>
+          or upload audio:&nbsp;
+          <input type="file" accept="audio/*" onChange={onPickFile} disabled={transcribing}
+            style={{ width: "auto", display: "inline-block", padding: 2, border: 0 }} />
+        </label>
+        {transcribing && <span className="muted">transcribing…</span>}
+        {source === "voice" && !transcribing && <span className="tag done">from voice</span>}
+      </div>
+      <label>Update text (English, Japanese, or mixed) — speak above, or type/edit here</label>
       <textarea rows="3" value={text} onChange={e => setText(e.target.value)}
         placeholder="e.g. Color uniformity test rig is about 60% done, wrapping up sensor mounts by Friday." />
       <div className="row">
