@@ -125,10 +125,30 @@ def _task_label(task):
     return task.title, (proj.name if proj else None), (proj.name_ja if proj else None)
 
 
-def dashboard_metrics(db: Session):
-    projects = db.query(models.Project).order_by(models.Project.id).all()
-    tasks = db.query(models.Task).all()
-    updates = list_updates(db)  # newest first, nested items eager-loaded
+_SEV_RANK = {"high": 0, "medium": 1, "low": 2}
+
+
+def dashboard_metrics(db: Session, config: dict | None = None):
+    """Aggregate the fixed manager KPIs. With a week-6 `config`, focus/sort/limit the data:
+      config = {project, status, severity, sort, limit} (None/absent = no filter).
+    A project/status filter narrows which projects and tasks are counted; severity filters the
+    blocker list; sort/limit reorder and cap the lists. `sections` is honored by the UI.
+    """
+    config = config or {}
+    proj_f = config.get("project")
+    status_f = config.get("status")
+    sev_f = config.get("severity")
+    sort = config.get("sort")
+    limit = config.get("limit")
+
+    projects = [p for p in db.query(models.Project).order_by(models.Project.id).all()
+                if not proj_f or p.name == proj_f]
+    proj_ids = {p.id for p in projects}
+    tasks = [t for t in db.query(models.Task).all()
+             if t.project_id in proj_ids and (not status_f or t.status.value == status_f)]
+    task_ids = {t.id for t in tasks}
+    # An update is in scope when its task is in scope (project/status filters apply via the task).
+    updates = [u for u in list_updates(db) if u.task_id in task_ids]
 
     status_counts = {k: 0 for k in STATUS_KEYS}
     for t in tasks:
@@ -140,7 +160,7 @@ def dashboard_metrics(db: Session):
     for u in updates:
         title, pname, pname_ja = _task_label(u.task)
         for b in u.blockers:
-            if b.status == "open":
+            if b.status == "open" and (not sev_f or b.severity.value == sev_f):
                 by_severity[b.severity.value] = by_severity.get(b.severity.value, 0) + 1
                 blockers_list.append({
                     "description": b.description, "severity": b.severity.value, "owner": b.owner,
@@ -157,23 +177,24 @@ def dashboard_metrics(db: Session):
                 "due_date": n.due_date.isoformat() if n.due_date else None,
                 "task": title, "project": pname,
             })
-        if len(recent) < RECENT_LIMIT:
-            recent.append({
-                "id": u.id, "task": title, "project": pname, "author": u.author,
-                "language": u.language, "source": u.source,
-                "created_at": u.created_at, "snippet": (u.raw_text or "")[:140],
-                "blocker_count": len(u.blockers), "risk_count": len(u.risks),
-                "next_step_count": len(u.next_steps),
-            })
+        recent.append({
+            "id": u.id, "task": title, "project": pname, "author": u.author,
+            "language": u.language, "source": u.source,
+            "created_at": u.created_at, "snippet": (u.raw_text or "")[:140],
+            "blocker_count": len(u.blockers), "risk_count": len(u.risks),
+            "next_step_count": len(u.next_steps),
+        })
 
-    # Due-dated steps first (earliest first), then undated.
+    # Sorting (week 6). Defaults: blockers by severity, next steps by due date, activity newest-first.
+    blockers_list.sort(key=lambda b: _SEV_RANK.get(b["severity"], 9))
     upcoming.sort(key=lambda s: (s["due_date"] is None, s["due_date"] or ""))
 
     per_project = []
     for p in projects:
-        ptasks = p.tasks
+        ptasks = [t for t in p.tasks if not status_f or t.status.value == status_f]
         open_blk = sum(
-            1 for t in ptasks for u in t.updates for b in u.blockers if b.status == "open"
+            1 for t in ptasks for u in t.updates for b in u.blockers
+            if b.status == "open" and (not sev_f or b.severity.value == sev_f)
         )
         per_project.append({
             "id": p.id, "name": p.name, "name_ja": p.name_ja, "status": p.status.value,
@@ -182,6 +203,12 @@ def dashboard_metrics(db: Session):
             "open_blocker_count": open_blk,
             "done_task_count": sum(1 for t in ptasks if t.status.value == "done"),
         })
+    if sort == "progress":
+        per_project.sort(key=lambda p: p["avg_progress"], reverse=True)
+
+    # limit caps the list lengths; default recent cap still applies.
+    cap = limit if (isinstance(limit, int) and limit > 0) else None
+    recent_cap = cap or RECENT_LIMIT
 
     return {
         "totals": {"projects": len(projects), "tasks": len(tasks), "updates": len(updates)},
@@ -190,9 +217,40 @@ def dashboard_metrics(db: Session):
         "open_blockers": len(blockers_list),
         "open_blockers_by_severity": by_severity,
         "open_risks": len(risks_list),
-        "blockers_list": blockers_list,
-        "risks_list": risks_list,
-        "recent_updates": recent,
-        "upcoming_next_steps": upcoming[:RECENT_LIMIT],
+        "blockers_list": blockers_list[:cap] if cap else blockers_list,
+        "risks_list": risks_list[:cap] if cap else risks_list,
+        "recent_updates": recent[:recent_cap],
+        "upcoming_next_steps": upcoming[:cap] if cap else upcoming[:RECENT_LIMIT],
         "per_project": per_project,
     }
+
+
+# ---------- Saved views (week 6) ----------
+import json as _json  # noqa: E402  (local use only)
+
+
+def list_views(db: Session):
+    return db.query(models.SavedView).order_by(models.SavedView.id).all()
+
+
+def create_view(db: Session, name: str, config: dict):
+    obj = models.SavedView(name=name, config=_json.dumps(config))
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+
+def delete_view(db: Session, view_id: int) -> bool:
+    obj = db.get(models.SavedView, view_id)
+    if not obj:
+        return False
+    db.delete(obj)
+    db.commit()
+    return True
+
+
+def view_to_dict(obj):
+    """Decode a SavedView row into the SavedViewOut shape (config as a dict)."""
+    return {"id": obj.id, "name": obj.name, "config": _json.loads(obj.config),
+            "created_at": obj.created_at}

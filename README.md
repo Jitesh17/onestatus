@@ -92,6 +92,10 @@ docker-compose.yml
 | GET / POST | /updates | list / create status updates with nested items |
 | POST | /extract | (week 2) text → structured draft via local LLM; persists nothing |
 | POST | /transcribe | (week 4) audio (multipart) → transcript via local faster-whisper; persists nothing |
+| GET | /dashboard | (week 5) fixed manager KPIs aggregated from the data |
+| POST | /dashboard/configure | (week 6) natural-language command → view-config + filtered dashboard |
+| POST | /dashboard/apply | (week 6) apply an explicit/saved view-config → filtered dashboard |
+| GET / POST / DELETE | /views | (week 6) saved named view-configs |
 
 ## Coming next (per the build plan)
 

@@ -240,3 +240,43 @@ class DashboardOut(BaseModel):
     recent_updates: list[RecentUpdateRow] = []
     upcoming_next_steps: list[NextStepRow] = []
     per_project: list[ProjectRollupRow] = []
+
+
+# ---------- NL dashboard reconfiguration + saved views (week 6) ----------
+class ViewConfig(BaseModel):
+    project: str | None = None
+    status: str | None = None
+    severity: str | None = None
+    sections: list[str] = []          # [] = all; else show only these
+    hide: list[str] = []              # sections to remove (subtractive intent, e.g. "hide risks")
+    sort: str | None = None           # severity | recent | progress | due
+    limit: int | None = None
+    summary: str = ""                 # human echo of what was understood
+
+
+class ConfigureRequest(BaseModel):
+    request: str
+    language: str = "en"
+    model: str | None = None
+
+
+class ApplyRequest(BaseModel):
+    config: ViewConfig
+
+
+class ConfiguredDashboard(BaseModel):
+    config: ViewConfig
+    dashboard: DashboardOut
+
+
+class SavedViewIn(BaseModel):
+    name: str
+    config: ViewConfig
+
+
+class SavedViewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    config: ViewConfig
+    created_at: dt.datetime

@@ -53,6 +53,20 @@ style.textContent = `
   .feed .item.voice { border-color: #ed7d31; }
   .sevdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
   .sevdot.high { background: #c0392b; } .sevdot.medium { background: #e0a400; } .sevdot.low { background: #999; }
+
+  /* week 6: NL command bar + saved views */
+  .cmdbar { border-color: #1f3864; }
+  .cmdrow { display: flex; gap: 8px; align-items: center; }
+  .cmdrow input { flex: 1; }
+  .cmdrow button { margin: 0; padding: 8px 14px; }
+  .activecfg { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .activecfg .savein { width: auto; flex: 0 1 160px; padding: 5px 8px; }
+  .activecfg button { margin: 0; padding: 6px 12px; }
+  button.link { background: transparent; color: #1f3864; text-decoration: underline; padding: 2px 4px; margin: 0; }
+  .savedviews { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .viewchip { display: inline-flex; align-items: center; border: 1px solid #c9c9cf; border-radius: 16px; overflow: hidden; }
+  .viewchip .vname { background: #f0f1f5; color: #1f3864; border: 0; margin: 0; padding: 4px 10px; font-size: 13px; border-radius: 0; }
+  .viewchip .vx { background: #fff; color: #c0392b; border: 0; margin: 0; padding: 4px 9px; font-size: 14px; border-radius: 0; }
 `;
 document.head.appendChild(style);
 

@@ -59,18 +59,111 @@ const STATUS_LABEL = { not_started: "Not started", in_progress: "In progress", b
 function Dashboard({ tick }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
-  useEffect(() => {
-    api.dashboard().then(setD).catch(e => setErr(e.message || "Could not load dashboard."));
-  }, [tick]);
+  const [config, setConfig] = useState(null);     // active ViewConfig, null = full view
+  const [cmd, setCmd] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [views, setViews] = useState([]);
+  const [saveName, setSaveName] = useState("");
+  const [recording, setRecording] = useState(false);
+  const recRef = useRef(null);
 
-  if (err) return <div className="card" style={{ borderColor: "#c00", color: "#c00" }}>{err}</div>;
+  async function loadFull() {
+    try { setD(await api.dashboard()); setConfig(null); setErr(""); }
+    catch (e) { setErr(e.message || "Could not load dashboard."); }
+  }
+  async function refreshViews() {
+    try { setViews(await api.listViews()); } catch { /* ignore */ }
+  }
+  useEffect(() => { loadFull(); refreshViews(); }, [tick]);
+
+  async function runCmd(text) {
+    const q = (text ?? cmd).trim();
+    if (!q) return;
+    setBusy(true); setErr("");
+    try {
+      const r = await api.configureDashboard({ request: q });
+      setConfig(r.config); setD(r.dashboard);
+    } catch (e) { setErr(e.message || "Could not interpret that command."); }
+    finally { setBusy(false); }
+  }
+  async function applySaved(v) {
+    setBusy(true); setErr("");
+    try { const r = await api.applyView(v.config); setConfig(r.config); setD(r.dashboard); setCmd(v.name); }
+    catch (e) { setErr(e.message || "Could not apply view."); }
+    finally { setBusy(false); }
+  }
+  async function saveCurrent() {
+    if (!saveName.trim() || !config) return;
+    await api.saveView({ name: saveName.trim(), config });
+    setSaveName(""); refreshViews();
+  }
+  async function removeView(id) { await api.deleteView(id); refreshViews(); }
+
+  async function toggleMic() {
+    if (recording) { recRef.current?.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream); const chunks = [];
+      rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop()); setRecording(false);
+        try {
+          const fd = new FormData(); fd.append("file", new Blob(chunks, { type: rec.mimeType || "audio/webm" }), "cmd.webm");
+          const r = await api.transcribe(fd); setCmd(r.text); runCmd(r.text);
+        } catch (e) { setErr(e.message || "Transcription failed."); }
+      };
+      recRef.current = rec; rec.start(); setRecording(true);
+    } catch (e) { setErr("Microphone unavailable: " + (e.message || e)); }
+  }
+
+  if (err && !d) return <div className="card" style={{ borderColor: "#c00", color: "#c00" }}>{err}</div>;
   if (!d) return <div className="card"><p className="muted">Loading dashboard…</p></div>;
 
   const totalTasks = d.totals.tasks || 0;
   const pct = (n) => (totalTasks ? (n / totalTasks) * 100 : 0);
+  const sections = config?.sections || [];
+  const hide = config?.hide || [];
+  const vis = (s) => (sections.length === 0 || sections.includes(s)) && !hide.includes(s);
+  const chipBits = config && [
+    config.project, config.status && STATUS_LABEL[config.status], config.severity && `${config.severity} sev`,
+    config.sort && `by ${config.sort}`, config.limit && `top ${config.limit}`,
+  ].filter(Boolean);
 
   return (
     <>
+      <div className="card cmdbar">
+        <div className="cmdrow">
+          <input value={cmd} onChange={e => setCmd(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && runCmd()}
+            placeholder='Reconfigure in words: "only blocked tasks in BRAVIA", "hide risks, top 3 blockers"' />
+          <button onClick={() => runCmd()} disabled={busy}>{busy ? "…" : "Run"}</button>
+          <button onClick={toggleMic} title="Speak a command"
+            style={{ background: recording ? "#c0392b" : "#1f3864" }}>{recording ? "■" : "🎙"}</button>
+        </div>
+        {config && (
+          <div className="activecfg">
+            <span className="tag" style={{ background: "#ffe9c2" }}>view: {config.summary || "custom"}</span>
+            {chipBits.map((b, i) => <span key={i} className="tag">{b}</span>)}
+            <button className="link" onClick={loadFull}>clear</button>
+            <span style={{ flex: 1 }} />
+            <input className="savein" value={saveName} onChange={e => setSaveName(e.target.value)} placeholder="name this view" />
+            <button onClick={saveCurrent} disabled={!saveName.trim()}>Save view</button>
+          </div>
+        )}
+        {views.length > 0 && (
+          <div className="savedviews">
+            <span className="muted">Saved:</span>
+            {views.map(v => (
+              <span key={v.id} className="viewchip">
+                <button className="vname" onClick={() => applySaved(v)}>{v.name}</button>
+                <button className="vx" onClick={() => removeView(v.id)} title="Delete">×</button>
+              </span>
+            ))}
+          </div>
+        )}
+        {err && <p className="muted" style={{ color: "#c00", margin: "6px 0 0" }}>{err}</p>}
+      </div>
+
       <div className="kpis">
         <div className="kpi"><div className="n">{d.totals.projects}</div><div className="l">Projects</div></div>
         <div className="kpi"><div className="n">{d.totals.tasks}</div><div className="l">Tasks</div></div>
@@ -79,7 +172,7 @@ function Dashboard({ tick }) {
         <div className={"kpi" + (d.open_risks ? " warn" : "")}><div className="n">{d.open_risks}</div><div className="l">Open risks</div></div>
       </div>
 
-      <div className="card">
+      {vis("delivery") && <div className="card">
         <div className="h3">Delivery status</div>
         <div className="segbar">
           {STATUS_SEG.map(s => pct(d.task_status_counts[s]) > 0 &&
@@ -91,9 +184,9 @@ function Dashboard({ tick }) {
             <span key={s}><span className={"sw seg s_" + s} />{STATUS_LABEL[s]}: {d.task_status_counts[s]}</span>
           ))}
         </div>
-      </div>
+      </div>}
 
-      <div className="card">
+      {vis("per_project") && <div className="card">
         <div className="h3">Projects</div>
         <table>
           <thead><tr><th>Project</th><th>Status</th><th>Progress</th><th>Tasks</th><th>Open blockers</th></tr></thead>
@@ -114,10 +207,10 @@ function Dashboard({ tick }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </div>}
 
-      <div className="row" style={{ alignItems: "stretch" }}>
-        <div className="card" style={{ flex: 1 }}>
+      {(vis("blockers") || vis("risks")) && <div className="row" style={{ alignItems: "stretch" }}>
+        {vis("blockers") && <div className="card" style={{ flex: 1 }}>
           <div className="h3">Open blockers ({d.open_blockers})</div>
           {d.blockers_list.length === 0 ? <p className="muted">None open.</p> : (
             <div className="feed">
@@ -129,8 +222,8 @@ function Dashboard({ tick }) {
               ))}
             </div>
           )}
-        </div>
-        <div className="card" style={{ flex: 1 }}>
+        </div>}
+        {vis("risks") && <div className="card" style={{ flex: 1 }}>
           <div className="h3">Risks ({d.open_risks})</div>
           {d.risks_list.length === 0 ? <p className="muted">None flagged.</p> : (
             <div className="feed">
@@ -142,11 +235,11 @@ function Dashboard({ tick }) {
               ))}
             </div>
           )}
-        </div>
-      </div>
+        </div>}
+      </div>}
 
-      <div className="row" style={{ alignItems: "stretch" }}>
-        <div className="card" style={{ flex: 1 }}>
+      {(vis("activity") || vis("next_steps")) && <div className="row" style={{ alignItems: "stretch" }}>
+        {vis("activity") && <div className="card" style={{ flex: 1 }}>
           <div className="h3">Recent activity</div>
           {d.recent_updates.length === 0 ? <p className="muted">No updates yet.</p> : (
             <div className="feed">
@@ -162,8 +255,8 @@ function Dashboard({ tick }) {
               ))}
             </div>
           )}
-        </div>
-        <div className="card" style={{ flex: 1 }}>
+        </div>}
+        {vis("next_steps") && <div className="card" style={{ flex: 1 }}>
           <div className="h3">Upcoming next steps</div>
           {d.upcoming_next_steps.length === 0 ? <p className="muted">Nothing queued.</p> : (
             <div className="feed">
@@ -175,8 +268,8 @@ function Dashboard({ tick }) {
               ))}
             </div>
           )}
-        </div>
-      </div>
+        </div>}
+      </div>}
     </>
   );
 }

@@ -36,4 +36,9 @@ export const api = {
   extractUpdate: (data) => req("/extract", { method: "POST", body: JSON.stringify(data) }),
   transcribe: (formData) => upload("/transcribe", formData),
   dashboard: () => req("/dashboard"),
+  configureDashboard: (data) => req("/dashboard/configure", { method: "POST", body: JSON.stringify(data) }),
+  applyView: (config) => req("/dashboard/apply", { method: "POST", body: JSON.stringify({ config }) }),
+  listViews: () => req("/views"),
+  saveView: (data) => req("/views", { method: "POST", body: JSON.stringify(data) }),
+  deleteView: (id) => req(`/views/${id}`, { method: "DELETE" }),
 };

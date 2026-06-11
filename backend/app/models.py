@@ -104,3 +104,12 @@ class NextStep(Base):
     due_date: Mapped[dt.date | None] = mapped_column(nullable=True)
 
     update: Mapped["Update"] = relationship(back_populates="next_steps")
+
+
+class SavedView(Base):
+    """A named dashboard view-config (week 6). `config` holds the ViewConfig JSON as text."""
+    __tablename__ = "saved_views"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    config: Mapped[str] = mapped_column(Text)  # JSON-encoded ViewConfig
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)

@@ -86,15 +86,21 @@ Rules:
 Return ONLY the JSON object, no prose."""
 
 
-def _ollama_chat(text, world, model, base_url):
+def ollama_json(system_prompt, user_text, model=None, base_url=None):
+    """Call the local Ollama chat API in JSON mode and return the parsed dict.
+
+    Shared by the extractor and the week-6 view interpreter. Raises ExtractorError on a
+    connection failure or unparseable output so callers can surface a clean 503.
+    """
+    base_url = base_url or OLLAMA_URL
     payload = {
-        "model": model,
+        "model": model or DEFAULT_MODEL,
         "format": "json",
         "stream": False,
         "options": {"temperature": 0},
         "messages": [
-            {"role": "system", "content": _system_prompt(world)},
-            {"role": "user", "content": text},
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_text},
         ],
     }
     req = urllib.request.Request(
@@ -117,6 +123,10 @@ def _ollama_chat(text, world, model, base_url):
         return json.loads(content)
     except json.JSONDecodeError as e:
         raise ExtractorError(f"Model did not return valid JSON: {content[:200]}") from e
+
+
+def _ollama_chat(text, world, model, base_url):
+    return ollama_json(_system_prompt(world), text, model=model, base_url=base_url)
 
 
 def _coerce(raw, world):
