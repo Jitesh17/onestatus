@@ -7,13 +7,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .database import Base, engine
-from . import models  # noqa: F401  (import registers models on Base before create_all)
+from . import models, migrate  # noqa: F401  (import registers models on Base before create_all)
 from .routers import projects, tasks, updates, extract, transcribe, dashboard, views
 
 app = FastAPI(title="Sony OneStatus API", version="0.1.0")
 
 # Week 1: create_all is enough. Move to Alembic migrations once the schema settles.
+# create_all never ALTERs existing tables, so migrate.run adds any new nullable columns.
 Base.metadata.create_all(bind=engine)
+migrate.run(engine)
 
 # The React dev server runs on a different port, so allow it during development.
 app.add_middleware(

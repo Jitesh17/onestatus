@@ -9,9 +9,10 @@ Run from the backend folder:  python -m app.seed_demo
 """
 import datetime as dt
 from .database import SessionLocal, Base, engine
-from . import models
+from . import models, migrate
 
 Base.metadata.create_all(bind=engine)
+migrate.run(engine)  # adds new nullable columns (e.g. updates.status) to an existing DB
 
 S = models.Status
 SV = models.Severity
@@ -78,6 +79,63 @@ DEMO = [
 ]
 
 
+# ---------- Backdated history (trends sprint) ----------
+# ~3 weeks of progress snapshots per task so the trend charts have a story: rising
+# progress_pct, status transitions, and one blocker that opens then resolves.
+# task title -> [(days_ago, pct, status)] oldest-first, ending near the task's current values.
+HISTORY = {
+    "Color uniformity test rig": [(21, 10, "in_progress"), (17, 25, "in_progress"),
+                                  (12, 35, "in_progress"), (7, 50, "in_progress"), (2, 60, "in_progress")],
+    "Japan-side review pipeline": [(20, 5, "in_progress"), (14, 15, "in_progress"),
+                                   (8, 20, "blocked"), (3, 20, "blocked")],
+    "Calibration dataset prep": [(19, 10, "in_progress"), (11, 30, "in_progress"), (4, 45, "in_progress")],
+    "Noise suppression model": [(21, 55, "in_progress"), (15, 75, "in_progress"),
+                                (9, 90, "in_progress"), (5, 100, "done")],
+    "Field recording collection": [(18, 15, "in_progress"), (10, 35, "in_progress"), (3, 55, "in_progress")],
+    "Speaker separation module": [(16, 10, "in_progress"), (9, 25, "in_progress"), (2, 40, "in_progress")],
+}
+
+# (task title, days_ago) -> blocker tuple attached to that history update. The same
+# description appears once "open" and later "resolved", stepping the burn-down line.
+HISTORY_BLOCKERS = {
+    ("Noise suppression model", 15): ("GPU cluster maintenance window", SV.medium, "Shivam", "open"),
+    ("Noise suppression model", 9): ("GPU cluster maintenance window", SV.medium, "Shivam", "resolved"),
+}
+
+
+def _ago(days: int) -> dt.datetime:
+    return (dt.datetime.utcnow() - dt.timedelta(days=days)).replace(
+        hour=10, minute=0, second=0, microsecond=0)
+
+
+def seed_history(db):
+    """Idempotent: any update older than ~2 days is the marker that history exists."""
+    cutoff = dt.datetime.utcnow() - dt.timedelta(days=2)
+    if db.query(models.Update).filter(models.Update.created_at < cutoff).first():
+        print("Backdated history already present, nothing added.")
+        return
+    tasks = {t.title: t for t in db.query(models.Task).all()}
+    n = 0
+    for title, points in HISTORY.items():
+        task = tasks.get(title)
+        if not task:
+            continue
+        for days_ago, pct, status in points:
+            upd = models.Update(
+                task_id=task.id, author=task.assignee, language="en", source="text",
+                raw_text=f"{title}: progress at {pct} percent.",
+                created_at=_ago(days_ago), status=status, progress_pct=pct,
+            )
+            blk = HISTORY_BLOCKERS.get((title, days_ago))
+            if blk:
+                upd.blockers = [models.Blocker(description=blk[0], severity=blk[1],
+                                               owner=blk[2], status=blk[3])]
+            db.add(upd)
+            n += 1
+    db.commit()
+    print(f"Backdated history added: {n} update(s).")
+
+
 def run():
     db = SessionLocal()
     try:
@@ -114,6 +172,7 @@ def run():
             print(f"Demo seed complete. Added {added} project(s).")
         else:
             print("Demo projects already present, nothing added.")
+        seed_history(db)
     finally:
         db.close()
 

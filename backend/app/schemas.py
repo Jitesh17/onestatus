@@ -76,6 +76,8 @@ class UpdateCreate(BaseModel):
     language: str = "en"
     raw_text: str | None = None
     source: str = "text"
+    status: Status | None = None                              # snapshot; also patches the Task
+    progress_pct: int | None = Field(default=None, ge=0, le=100)
     blockers: list[BlockerIn] = []
     risks: list[RiskIn] = []
     next_steps: list[NextStepIn] = []
@@ -106,6 +108,8 @@ class UpdateOut(BaseModel):
     source: str
     confirmed: bool
     created_at: dt.datetime
+    status: str | None = None
+    progress_pct: int | None = None
     blockers: list[BlockerOut] = []
     risks: list[RiskOut] = []
     next_steps: list[NextStepOut] = []
@@ -228,6 +232,16 @@ class ProjectRollupRow(BaseModel):
     done_task_count: int
 
 
+class TrendPoint(BaseModel):
+    date: str                             # ISO day
+    value: int
+
+
+class Trends(BaseModel):
+    progress: list[TrendPoint] = []       # mean task progress per day (carry-forward)
+    blockers: list[TrendPoint] = []       # open blocker count per day (opens − resolves)
+
+
 class DashboardOut(BaseModel):
     totals: dict[str, int]
     task_status_counts: TaskStatusCounts
@@ -240,6 +254,7 @@ class DashboardOut(BaseModel):
     recent_updates: list[RecentUpdateRow] = []
     upcoming_next_steps: list[NextStepRow] = []
     per_project: list[ProjectRollupRow] = []
+    trends: Trends = Trends()
 
 
 # ---------- NL dashboard reconfiguration + saved views (week 6) ----------
@@ -251,6 +266,9 @@ class ViewConfig(BaseModel):
     hide: list[str] = []              # sections to remove (subtractive intent, e.g. "hide risks")
     sort: str | None = None           # severity | recent | progress | due
     limit: int | None = None
+    days: int | None = None           # relative lookback ("last 2 weeks" -> 14); wins over dates
+    date_from: str | None = None      # ISO day, inclusive
+    date_to: str | None = None        # ISO day, inclusive
     summary: str = ""                 # human echo of what was understood
 
 

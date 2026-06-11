@@ -54,6 +54,10 @@ style.textContent = `
   .sevdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
   .sevdot.high { background: #c0392b; } .sevdot.medium { background: #e0a400; } .sevdot.low { background: #999; }
 
+  /* trends sprint: inline SVG charts */
+  .trend svg { width: 100%; height: 96px; display: block; }
+  .trendmeta { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; margin-top: 4px; }
+
   /* week 6: NL command bar + saved views */
   .cmdbar { border-color: #1f3864; }
   .cmdrow { display: flex; gap: 8px; align-items: center; }

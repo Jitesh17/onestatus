@@ -63,6 +63,10 @@ class Update(Base):
     source: Mapped[str] = mapped_column(String(10), default="text")  # text or voice
     confirmed: Mapped[bool] = mapped_column(default=True)  # week 1: manual entry is confirmed by definition
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+    # Snapshot of what this update reported (trends sprint). Nullable: older rows and
+    # updates that don't mention status/progress leave them empty. Current state lives on Task.
+    status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    progress_pct: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     task: Mapped["Task"] = relationship(back_populates="updates")
     blockers: Mapped[list["Blocker"]] = relationship(back_populates="update", cascade="all, delete-orphan")

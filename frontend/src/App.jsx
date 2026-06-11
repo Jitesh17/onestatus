@@ -127,6 +127,9 @@ function Dashboard({ tick }) {
   const chipBits = config && [
     config.project, config.status && STATUS_LABEL[config.status], config.severity && `${config.severity} sev`,
     config.sort && `by ${config.sort}`, config.limit && `top ${config.limit}`,
+    config.days && `last ${config.days} days`,
+    !config.days && config.date_from && `from ${config.date_from}`,
+    !config.days && config.date_to && `to ${config.date_to}`,
   ].filter(Boolean);
 
   return (
@@ -171,6 +174,17 @@ function Dashboard({ tick }) {
         <div className={"kpi" + (d.open_blockers ? " warn" : "")}><div className="n">{d.open_blockers}</div><div className="l">Open blockers</div></div>
         <div className={"kpi" + (d.open_risks ? " warn" : "")}><div className="n">{d.open_risks}</div><div className="l">Open risks</div></div>
       </div>
+
+      {vis("trends") && <div className="row" style={{ alignItems: "stretch" }}>
+        <div className="card" style={{ flex: 1 }}>
+          <div className="h3">Progress over time</div>
+          <TrendChart points={d.trends?.progress} max={100} unit="%" color="#2e7d32" />
+        </div>
+        <div className="card" style={{ flex: 1 }}>
+          <div className="h3">Open blockers over time</div>
+          <TrendChart points={d.trends?.blockers} unit="" color="#c0392b" step />
+        </div>
+      </div>}
 
       {vis("delivery") && <div className="card">
         <div className="h3">Delivery status</div>
@@ -271,6 +285,37 @@ function Dashboard({ tick }) {
         </div>}
       </div>}
     </>
+  );
+}
+
+// Dependency-free inline SVG line chart (trends sprint). `step` draws a step line
+// (right then down/up) for count series; otherwise a straight polyline. Scales to
+// `max` when given (progress 0-100), else to the series peak.
+function TrendChart({ points, max, unit = "", color = "#1f3864", step = false }) {
+  if (!points || points.length === 0) return <p className="muted">No history yet.</p>;
+  const W = 320, H = 96, PAD = 6;
+  const hi = max ?? Math.max(...points.map(p => p.value), 1);
+  const x = (i) => (points.length === 1 ? W / 2 : PAD + (i * (W - 2 * PAD)) / (points.length - 1));
+  const y = (v) => H - PAD - (v / hi) * (H - 2 * PAD);
+  const coords = [];
+  points.forEach((p, i) => {
+    if (step && i > 0) coords.push(`${x(i)},${y(points[i - 1].value)}`);
+    coords.push(`${x(i)},${y(p.value)}`);
+  });
+  const last = points[points.length - 1];
+  return (
+    <div className="trend">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="#ececf0" />
+        <polyline points={coords.join(" ")} fill="none" stroke={color} strokeWidth="2" />
+        <circle cx={x(points.length - 1)} cy={y(last.value)} r="3" fill={color} />
+      </svg>
+      <div className="trendmeta">
+        <span className="muted">{points[0].date}</span>
+        <span style={{ color }}><b>{last.value}{unit}</b></span>
+        <span className="muted">{last.date}</span>
+      </div>
+    </div>
   );
 }
 
@@ -477,6 +522,8 @@ function AiUpdateForm({ tasks, onDone }) {
       language,
       raw_text: text,
       source, // "voice" if the text came from audio, else "text"
+      status: draft.status || null,            // snapshot on the Update; also patches the Task
+      progress_pct: draft.progress_pct ?? null,
       blockers: draft.blockers.map(b => ({ ...b, severity: b.severity || "medium", status: b.status || "open" })),
       risks: draft.risks,
       next_steps: draft.next_steps.map(n => ({ ...n, due_date: isISO(n.due_date) ? n.due_date : null })),

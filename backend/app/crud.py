@@ -1,4 +1,6 @@
 """CRUD functions. Routes stay thin; all DB work happens here."""
+import datetime as dt
+
 from sqlalchemy.orm import Session, selectinload
 from . import models, schemas
 
@@ -89,7 +91,11 @@ def resolve_task_id(db: Session, project_name: str | None, task_title: str | Non
 
 
 def create_update(db: Session, data: schemas.UpdateCreate):
-    """Create an update plus its nested blockers, risks, and next steps in one go."""
+    """Create an update plus its nested blockers, risks, and next steps in one go.
+
+    status/progress_pct are stored on the Update as a point-in-time snapshot (trend history)
+    AND patched onto the matched Task (current state), when provided.
+    """
     obj = models.Update(
         task_id=data.task_id,
         author=data.author,
@@ -97,11 +103,20 @@ def create_update(db: Session, data: schemas.UpdateCreate):
         raw_text=data.raw_text,
         source=data.source,
         confirmed=True,  # manual entry is confirmed by definition in week 1
+        status=data.status.value if data.status else None,
+        progress_pct=data.progress_pct,
     )
     obj.blockers = [models.Blocker(**b.model_dump()) for b in data.blockers]
     obj.risks = [models.Risk(**r.model_dump()) for r in data.risks]
     obj.next_steps = [models.NextStep(**n.model_dump()) for n in data.next_steps]
     db.add(obj)
+    if data.task_id is not None and (data.status is not None or data.progress_pct is not None):
+        task = db.get(models.Task, data.task_id)
+        if task:
+            if data.status is not None:
+                task.status = data.status
+            if data.progress_pct is not None:
+                task.progress_pct = data.progress_pct
     db.commit()
     db.refresh(obj)
     return obj
@@ -128,11 +143,39 @@ def _task_label(task):
 _SEV_RANK = {"high": 0, "medium": 1, "low": 2}
 
 
+def _effective_range(config: dict | None):
+    """Resolve the config's date fields into (start, end) dates, either side None = unbounded.
+
+    `days` (relative lookback ending today) wins over date_from/date_to. Bad ISO strings are
+    treated as absent rather than erroring: the NL interpreter feeds these fields.
+    """
+    config = config or {}
+    today = dt.date.today()
+    days = config.get("days")
+    if isinstance(days, int) and days > 0:
+        return today - dt.timedelta(days=days - 1), today
+    start = end = None
+    raw_from, raw_to = config.get("date_from"), config.get("date_to")
+    try:
+        start = dt.date.fromisoformat(str(raw_from)[:10]) if raw_from else None
+    except ValueError:
+        start = None
+    try:
+        end = dt.date.fromisoformat(str(raw_to)[:10]) if raw_to else None
+    except ValueError:
+        end = None
+    return start, end
+
+
 def dashboard_metrics(db: Session, config: dict | None = None):
     """Aggregate the fixed manager KPIs. With a week-6 `config`, focus/sort/limit the data:
-      config = {project, status, severity, sort, limit} (None/absent = no filter).
+      config = {project, status, severity, sort, limit, days, date_from, date_to}
+      (None/absent = no filter).
     A project/status filter narrows which projects and tasks are counted; severity filters the
     blocker list; sort/limit reorder and cap the lists. `sections` is honored by the UI.
+    A date range scopes the EVENT lists (activity, blockers, risks, next steps) and the trend
+    axis; task/project counts and progress stay whole-world because they describe current STATE,
+    not events in the window.
     """
     config = config or {}
     proj_f = config.get("project")
@@ -140,6 +183,7 @@ def dashboard_metrics(db: Session, config: dict | None = None):
     sev_f = config.get("severity")
     sort = config.get("sort")
     limit = config.get("limit")
+    range_start, range_end = _effective_range(config)
 
     projects = [p for p in db.query(models.Project).order_by(models.Project.id).all()
                 if not proj_f or p.name == proj_f]
@@ -149,6 +193,10 @@ def dashboard_metrics(db: Session, config: dict | None = None):
     task_ids = {t.id for t in tasks}
     # An update is in scope when its task is in scope (project/status filters apply via the task).
     updates = [u for u in list_updates(db) if u.task_id in task_ids]
+    if range_start or range_end:
+        updates = [u for u in updates
+                   if (not range_start or u.created_at.date() >= range_start)
+                   and (not range_end or u.created_at.date() <= range_end)]
 
     status_counts = {k: 0 for k in STATUS_KEYS}
     for t in tasks:
@@ -222,7 +270,90 @@ def dashboard_metrics(db: Session, config: dict | None = None):
         "recent_updates": recent[:recent_cap],
         "upcoming_next_steps": upcoming[:cap] if cap else upcoming[:RECENT_LIMIT],
         "per_project": per_project,
+        "trends": trend_series(db, config),
     }
+
+
+# ---------- Trend series (trends sprint) ----------
+# Daily history derived from Update snapshots; the data volume is tiny, so this recomputes
+# on every dashboard call rather than caching.
+TREND_MAX_POINTS = 60
+
+
+def trend_series(db: Session, config: dict | None = None):
+    """Daily {progress, blockers} series for the dashboard charts.
+
+    progress: per day, mean over in-scope tasks of the last-known Update.progress_pct snapshot
+      on/before that day (carry-forward; 0 before a task's first snapshot). A task with no
+      snapshots at all contributes its current Task.progress_pct as a flat line (legacy rows).
+    blockers: per day, max(0, opens<=day - resolves<=day), where each blocker row is an open or
+      resolve event dated by its update's created_at (no blocker identity tracking; documented).
+    Respects the config's project/status focus and date range. Axis capped at ~TREND_MAX_POINTS
+    by sampling; the final day is always included.
+    """
+    config = config or {}
+    proj_f = config.get("project")
+    status_f = config.get("status")
+    range_start, range_end = _effective_range(config)
+
+    projects = [p for p in db.query(models.Project).order_by(models.Project.id).all()
+                if not proj_f or p.name == proj_f]
+    proj_ids = {p.id for p in projects}
+    tasks = [t for t in db.query(models.Task).all()
+             if t.project_id in proj_ids and (not status_f or t.status.value == status_f)]
+    task_ids = {t.id for t in tasks}
+    # All history for the in-scope tasks: carry-forward needs snapshots from BEFORE the range
+    # start, so the date range trims the axis below, not this list.
+    updates = [u for u in list_updates(db) if u.task_id in task_ids]
+    if not updates or not tasks:
+        return {"progress": [], "blockers": []}
+
+    today = dt.date.today()
+    start = range_start or min(u.created_at.date() for u in updates)
+    end = min(range_end or today, today)
+    if start > end:
+        return {"progress": [], "blockers": []}
+
+    snaps: dict[int, list] = {}     # task_id -> [(date, pct)] oldest-first
+    events: list = []               # (date, +1 open / -1 resolve)
+    for u in updates:
+        day = u.created_at.date()
+        if u.progress_pct is not None and u.task_id is not None:
+            snaps.setdefault(u.task_id, []).append((day, u.progress_pct))
+        for b in u.blockers:
+            if b.status == "open":
+                events.append((day, 1))
+            elif b.status == "resolved":
+                events.append((day, -1))
+    for s in snaps.values():
+        s.sort()
+
+    n_days = (end - start).days + 1
+    step = max(1, -(-n_days // TREND_MAX_POINTS))  # ceil division
+    axis = [start + dt.timedelta(days=i) for i in range(0, n_days, step)]
+    if axis[-1] != end:
+        axis.append(end)
+
+    progress_pts, blocker_pts = [], []
+    for day in axis:
+        vals = []
+        for t in tasks:
+            s = snaps.get(t.id)
+            if s:
+                last = 0
+                for d, pct in s:
+                    if d <= day:
+                        last = pct
+                    else:
+                        break
+                vals.append(last)
+            else:
+                vals.append(t.progress_pct)
+        progress_pts.append({"date": day.isoformat(),
+                             "value": round(sum(vals) / len(vals)) if vals else 0})
+        open_n = sum(delta for d, delta in events if d <= day)
+        blocker_pts.append({"date": day.isoformat(), "value": max(0, open_n)})
+    return {"progress": progress_pts, "blockers": blocker_pts}
 
 
 # ---------- Saved views (week 6) ----------

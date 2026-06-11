@@ -4,16 +4,20 @@ Turns a short command ("only blocked tasks in BRAVIA", "hide risks, top 3 blocke
 severity") into a validated ViewConfig dict that crud.dashboard_metrics applies. Reuses
 the same local LLM (Ollama JSON mode) as the extractor, grounded in the known projects.
 """
+import datetime as dt
+import re
+
 from .extractor import ollama_json, ExtractorError  # noqa: F401  (re-export for callers)
 
-SECTIONS = ["delivery", "per_project", "blockers", "risks", "activity", "next_steps"]
+SECTIONS = ["delivery", "per_project", "blockers", "risks", "activity", "next_steps", "trends"]
 STATUSES = ["not_started", "in_progress", "blocked", "done"]
 SEVERITIES = ["low", "medium", "high"]
 SORTS = ["severity", "recent", "progress", "due"]
 
 EMPTY_CONFIG = {
     "project": None, "status": None, "severity": None,
-    "sections": [], "hide": [], "sort": None, "limit": None, "summary": "",
+    "sections": [], "hide": [], "sort": None, "limit": None,
+    "days": None, "date_from": None, "date_to": None, "summary": "",
 }
 
 
@@ -22,13 +26,15 @@ def _system_prompt(world):
         f"- {p['name']}" + (f" (JA: {p['name_ja']})" if p.get("name_ja") else "")
         for p in world.get("projects", [])
     )
+    today = dt.date.today().isoformat()
     return f"""You convert a manager's request into a strict JSON dashboard view-config.
+Today's date is {today}.
 
 Known projects:
 {projects}
 
 Sections: delivery (status chart), per_project (project table), blockers, risks,
-activity (recent updates), next_steps.
+activity (recent updates), next_steps, trends (charts over time).
 
 Return JSON with exactly these keys:
 - "project": the FULL known project name the request focuses on, or null for all. Match abbreviations
@@ -45,6 +51,12 @@ Return JSON with exactly these keys:
 - "sort": one of {SORTS} or null. "by severity"/"most severe"->"severity"; "newest"/"latest"->"recent";
   "by progress"->"progress"; "by due date"->"due".
 - "limit": integer cap for lists ("top 3"->3), or null.
+- "days": integer lookback ONLY when the request names a relative time window: "last 2 weeks"->14,
+  "this week"->7, "last month"->30, "recent"/"recently"->7. A Japanese relative time word maps the
+  same way (this week->7, last week->7, last month->30). Else null.
+- "date_from"/"date_to": ISO dates (YYYY-MM-DD) ONLY for explicit calendar bounds ("since June 1"->
+  date_from "{dt.date.today().year}-06-01"; "until Friday"-> the ISO date). Else null. When the
+  request is relative, prefer "days" and leave these null.
 - "summary": a short plain-English echo of what you applied.
 
 Set only what the request implies; otherwise null or []. Return ONLY the JSON object."""
@@ -75,6 +87,24 @@ def _explicit_severity(request):
     return any(w in t for w in _SEVERITY_WORDS)
 
 
+# Words that justify DATE fields. Same guard pattern as severity: 7B sometimes invents a
+# range ("how are things" -> days 7); drop date fields unless the request talks about time.
+_TIME_WORDS = ("week", "day", "month", "since", "last", "recent", "today", "yesterday",
+               "until", "till", "from", "今週", "先週", "今月", "先月", "最近", "今日", "昨日", "から", "まで")
+
+_ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _explicit_time(request):
+    t = (request or "").lower()
+    return any(w in t for w in _TIME_WORDS)
+
+
+def _iso_or_none(value):
+    s = str(value).strip()[:10] if value else ""
+    return s if _ISO_RE.match(s) else None
+
+
 def _coerce(raw, world, request=""):
     out = dict(EMPTY_CONFIG)
     out["project"] = _match_project(raw.get("project"), world)
@@ -91,6 +121,17 @@ def _coerce(raw, world, request=""):
 
     lim = raw.get("limit")
     out["limit"] = int(lim) if isinstance(lim, (int, float)) and lim > 0 else None
+
+    days = raw.get("days")
+    out["days"] = int(days) if isinstance(days, (int, float)) and days > 0 else None
+    out["date_from"] = _iso_or_none(raw.get("date_from"))
+    out["date_to"] = _iso_or_none(raw.get("date_to"))
+    # Same 7B guard as severity: no date scoping unless the request literally mentions time.
+    if not _explicit_time(request):
+        out["days"] = out["date_from"] = out["date_to"] = None
+    if out["days"]:
+        out["date_from"] = out["date_to"] = None  # days wins; keep the config unambiguous
+
     out["summary"] = (raw.get("summary") or "").strip()
     return out
 
