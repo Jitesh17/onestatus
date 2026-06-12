@@ -116,11 +116,11 @@ ORG = [
 ]
 
 
-def seed_people(db):
+def seed_people(db, org=ORG):
     """Idempotent by name: a person already in the table is never touched."""
     existing = {p.name for p in db.query(models.Person).all()}
     added = 0
-    for name, name_ja, team, dept in ORG:
+    for name, name_ja, team, dept in org:
         if name in existing:
             continue
         db.add(models.Person(name=name, name_ja=name_ja, team=team, department=dept))
@@ -137,7 +137,7 @@ def _ago(days: int) -> dt.datetime:
         hour=10, minute=0, second=0, microsecond=0)
 
 
-def seed_history(db):
+def seed_history(db, history=HISTORY, history_blockers=HISTORY_BLOCKERS):
     """Idempotent: any update older than ~2 days is the marker that history exists."""
     cutoff = dt.datetime.utcnow() - dt.timedelta(days=2)
     if db.query(models.Update).filter(models.Update.created_at < cutoff).first():
@@ -145,7 +145,7 @@ def seed_history(db):
         return
     tasks = {t.title: t for t in db.query(models.Task).all()}
     n = 0
-    for title, points in HISTORY.items():
+    for title, points in history.items():
         task = tasks.get(title)
         if not task:
             continue
@@ -155,7 +155,7 @@ def seed_history(db):
                 raw_text=f"{title}: progress at {pct} percent.",
                 created_at=_ago(days_ago), status=status, progress_pct=pct,
             )
-            blk = HISTORY_BLOCKERS.get((title, days_ago))
+            blk = history_blockers.get((title, days_ago))
             if blk:
                 upd.blockers = [models.Blocker(description=blk[0], severity=blk[1],
                                                owner=blk[2], status=blk[3])]
@@ -165,13 +165,15 @@ def seed_history(db):
     print(f"Backdated history added: {n} update(s).")
 
 
-def run():
+def run(demo=DEMO, org=ORG, history=HISTORY, history_blockers=HISTORY_BLOCKERS):
+    """Seed the given dataset (defaults: the office demo data). seed_generic.py passes
+    its own constants through the same machinery."""
     db = SessionLocal()
     try:
-        seed_people(db)
+        seed_people(db, org)
         existing = {p.name for p in db.query(models.Project).all()}
         added = 0
-        for d in DEMO:
+        for d in demo:
             if d["name"] in existing:
                 continue
             p = models.Project(name=d["name"], name_ja=d["name_ja"], owner=d["owner"],
@@ -202,7 +204,7 @@ def run():
             print(f"Demo seed complete. Added {added} project(s).")
         else:
             print("Demo projects already present, nothing added.")
-        seed_history(db)
+        seed_history(db, history, history_blockers)
     finally:
         db.close()
 

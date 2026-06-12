@@ -354,7 +354,7 @@ export function Dashboard({ tick }) {
         <div className="cmdrow">
           <input value={cmd} onChange={e => setCmd(e.target.value)}
             onKeyDown={e => e.key === "Enter" && runCmd()}
-            placeholder='Reconfigure in words: "only blocked tasks in BRAVIA", "hide risks, top 3 blockers"' />
+            placeholder='Reconfigure in words: "show only blocked tasks", "hide risks, top 3 blockers"' />
           <button onClick={() => runCmd()} disabled={busy}>{busy ? "…" : "Run"}</button>
           <button onClick={toggleMic} title="Speak a command"
             style={{ background: recording ? "#c0392b" : "#1f3864" }}>{recording ? "■" : "🎙"}</button>
@@ -823,7 +823,7 @@ function AiUpdateForm({ tasks, onDone }) {
       </div>
       <label>Update text (English, Japanese, or mixed): speak above, or type/edit here</label>
       <textarea rows="3" value={text} onChange={e => setText(e.target.value)}
-        placeholder="e.g. Color uniformity test rig is about 60% done, wrapping up sensor mounts by Friday." />
+        placeholder="e.g. Checkout flow rework is about 60% done, wrapping up the payment screens by Friday." />
       <div className="row">
         <div><label>Language</label>
           <select value={language} onChange={e => setLanguage(e.target.value)}>

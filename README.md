@@ -19,13 +19,34 @@ which mode is active.
 - Saving a confirmed update also updates the task itself, so the dashboard is always current
 - Manager dashboard: delivery status, overall progress, open blockers and risks, per-project
   rollup, recent activity, upcoming next steps, and trend charts built from per-update history
-- Natural-language dashboard control: "only blocked tasks in BRAVIA", "show the last 2 weeks",
+- Natural-language dashboard control: "show only blocked tasks", "show the last 2 weeks",
   "top 3 blockers by severity", or the same in Japanese. Saved views recall a layout in one click
 - Settings panel (gear icon): switch the LLM provider (local Ollama, OpenAI-compatible,
   Anthropic), pick any installed Ollama model, change the Whisper size and device, all live
   with no restart
 - Optional login (basic auth at nginx) gating the whole deployed app
 - Light and dark theme, remembered across sessions
+
+## Screenshots
+
+Taken with the neutral sample dataset (`backend/app/seed_generic.py`).
+
+The manager dashboard: KPIs, blockers and risks, per-project rollup, and trend charts.
+
+![Dashboard, light theme](assets/dashboard-light.png)
+
+The capture flow: speak or type an update, the model proposes a structured draft, a
+person reviews and confirms before anything is saved.
+
+![Capture with an extracted draft](assets/capture-draft.png)
+
+The settings panel: switch the LLM provider and models live, no restart.
+
+![Settings panel](assets/settings.png)
+
+Dark theme.
+
+![Dashboard, dark theme](assets/dashboard-dark.png)
 
 ## Stack
 
@@ -78,7 +99,8 @@ cd backend
 ```
 
 `seed_demo` loads three demo projects with three weeks of backdated history so the trend
-charts have a story. Use `app.seed` instead for a minimal dataset. API docs at
+charts have a story. Use `app.seed` instead for a minimal dataset, or `app.seed_generic`
+for the neutral sample data shown in the screenshots above. API docs at
 http://localhost:8000/docs (disabled in deployments via `API_DOCS=0`).
 
 4. Frontend, in a second terminal:
@@ -148,8 +170,10 @@ backend/
     transcriber.py      faster-whisper wrapper, live-reloadable
     seed.py             minimal demo data
     seed_demo.py        richer demo data + 3 weeks of backdated history
+    seed_generic.py     neutral sample data, used for the README screenshots
     routers/            projects, tasks, updates, extract, transcribe, dashboard, views, settings
   Dockerfile            python:3.11-slim image, non-root, healthcheck
+assets/                 README screenshots
 eval/                   labeled dataset + scoring harness (local vs cloud comparable)
 frontend/
   src/
