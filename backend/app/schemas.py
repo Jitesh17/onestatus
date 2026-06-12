@@ -69,12 +69,17 @@ class NextStepIn(BaseModel):
     due_date: dt.date | None = None
 
 
+# Cap on free-text bodies that reach storage or the local LLM. Real updates are a few
+# sentences; this only stops megabyte-scale payloads, not anything a person types.
+MAX_TEXT_LEN = 10_000
+
+
 # ---------- Update ----------
 class UpdateCreate(BaseModel):
     task_id: int | None = None
     author: str | None = None
     language: str = "en"
-    raw_text: str | None = None
+    raw_text: str | None = Field(default=None, max_length=MAX_TEXT_LEN)
     source: str = "text"
     status: Status | None = None                              # snapshot; also patches the Task
     progress_pct: int | None = Field(default=None, ge=0, le=100)
@@ -140,7 +145,7 @@ class TranscriptOut(BaseModel):
 
 
 class ExtractRequest(BaseModel):
-    raw_text: str
+    raw_text: str = Field(max_length=MAX_TEXT_LEN)
     language: str = "en"
     model: str | None = None  # override the default local model; None uses the server default
 
@@ -297,7 +302,7 @@ class ViewConfig(BaseModel):
 
 
 class ConfigureRequest(BaseModel):
-    request: str
+    request: str = Field(max_length=MAX_TEXT_LEN)
     language: str = "en"
     model: str | None = None
 

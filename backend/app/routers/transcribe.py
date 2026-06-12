@@ -11,10 +11,17 @@ from ..transcriber import transcribe, TranscriberError
 
 router = APIRouter(prefix="/transcribe", tags=["transcribe"])
 
+# Upload cap: a minute of browser MediaRecorder audio is well under 1 MB, so 25 MB
+# leaves generous headroom while keeping an oversized body out of memory-heavy decode.
+MAX_AUDIO_BYTES = 25 * 1024 * 1024
+
 
 @router.post("", response_model=schemas.TranscriptOut)
 async def transcribe_audio(file: UploadFile = File(...), language: str | None = Form(default=None)):
     audio = await file.read()
+    if len(audio) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413,
+                            detail=f"Audio upload too large (max {MAX_AUDIO_BYTES // (1024 * 1024)} MB).")
     try:
         result = transcribe(audio, language=language)
     except TranscriberError as e:

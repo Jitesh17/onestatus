@@ -176,9 +176,15 @@ def _coerce(raw, world, text=""):
     known_tasks = {t for p in world.get("projects", []) for t in p.get("tasks", [])}
     known_people = set(world.get("people", []))
 
+    # Non-string values (the model occasionally emits a list or number here) would
+    # blow up the set-membership tests below; treat them as absent.
     project = raw.get("project")
+    if not isinstance(project, str):
+        project = None
     out["project"] = project if project in known_projects else "unknown"
     task = raw.get("task")
+    if not isinstance(task, str):
+        task = None
     if task not in known_tasks:
         task = fuzzy_match(task, known_tasks)
     out["task"] = task if task in known_tasks else None

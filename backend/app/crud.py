@@ -170,7 +170,9 @@ def _effective_range(config: dict | None):
     today = dt.date.today()
     days = config.get("days")
     if isinstance(days, int) and days > 0:
-        return today - dt.timedelta(days=days - 1), today
+        # Cap at ~100 years: a huge lookback means "everything", and an unbounded
+        # subtraction overflows datetime.date for absurd values.
+        return today - dt.timedelta(days=min(days, 36_500) - 1), today
     start = end = None
     raw_from, raw_to = config.get("date_from"), config.get("date_to")
     try:

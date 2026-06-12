@@ -66,7 +66,7 @@ export default function App() {
 const STATUS_SEG = ["not_started", "in_progress", "blocked", "done"];
 const STATUS_LABEL = { not_started: "Not started", in_progress: "In progress", blocked: "Blocked", done: "Done" };
 
-function Dashboard({ tick }) {
+export function Dashboard({ tick }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
   const [config, setConfig] = useState(null);     // active ViewConfig, null = full view
@@ -385,7 +385,7 @@ function Dashboard({ tick }) {
 // Dependency-free inline SVG line chart (trends sprint). `step` draws a step line
 // (right then down/up) for count series; otherwise a straight polyline. Scales to
 // `max` when given (progress 0-100), else to the series peak.
-function TrendChart({ points, max, unit = "", color = "var(--accent)", step = false }) {
+export function TrendChart({ points, max, unit = "", color = "var(--accent)", step = false }) {
   if (!points || points.length === 0) return <p className="muted">No history yet.</p>;
   const W = 320, H = 96, PAD = 6;
   const hi = max ?? Math.max(...points.map(p => p.value), 1);
