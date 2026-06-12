@@ -51,7 +51,7 @@ def list_updates(db: Session):
 # ---------- World + name resolution (week 2 extraction) ----------
 # Fallback roster for DBs seeded before the `people` table existed (report-scenarios
 # sprint). When the table has rows, it is the source of truth for people AND teams.
-PEOPLE = ["Jitesh", "Neeraj", "Abhishake", "Shivam", "Tanaka-san", "Sato-san"]
+PEOPLE = ["Alex", "Sam", "Casey", "Jordan", "Yamada-san", "Suzuki-san"]
 
 
 def people_roster(db: Session):

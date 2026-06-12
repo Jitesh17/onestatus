@@ -3,7 +3,7 @@
 Additive and idempotent: only inserts a project if its name is not already present, so
 it is safe to run on top of existing data (including the small week-1 seed). Mirrors the
 eval world (3 projects, ~7 tasks) and spreads tasks across all statuses, with updates
-carrying blockers, risks, and next steps.
+carrying blockers, risks, and next steps. The README screenshots use this dataset.
 
 Run from the backend folder:  python -m app.seed_demo
 """
@@ -20,60 +20,60 @@ SV = models.Severity
 # Each project: meta + tasks (title, title_ja, assignee, status, progress) + updates.
 DEMO = [
     {
-        "name": "BRAVIA Panel Calibration", "name_ja": "ブラビア パネル キャリブレーション",
-        "owner": "Jitesh", "status": S.in_progress,
+        "name": "Website Redesign", "name_ja": "ウェブサイト刷新",
+        "owner": "Alex", "status": S.in_progress,
         "start": dt.date(2026, 6, 1), "target": dt.date(2026, 9, 30),
         "tasks": [
-            {"title": "Color uniformity test rig", "assignee": "Neeraj", "status": S.in_progress, "pct": 60},
-            {"title": "Japan-side review pipeline", "title_ja": "日本側レビュー パイプライン",
-             "assignee": "Abhishake", "status": S.blocked, "pct": 20},
-            {"title": "Calibration dataset prep", "assignee": "Neeraj", "status": S.in_progress, "pct": 45},
+            {"title": "Checkout flow rework", "assignee": "Sam", "status": S.in_progress, "pct": 60},
+            {"title": "Design review pipeline", "title_ja": "デザインレビュー パイプライン",
+             "assignee": "Jordan", "status": S.blocked, "pct": 20},
+            {"title": "Content migration", "assignee": "Sam", "status": S.in_progress, "pct": 45},
         ],
         "updates": [
-            {"task": "Japan-side review pipeline", "author": "Abhishake", "lang": "en", "source": "text",
-             "text": "Review pipeline blocked on sample data access from Japan side.",
-             "blockers": [("Waiting on sample data approval from Tokyo", SV.high, "Tokyo PMO", "open"),
+            {"task": "Design review pipeline", "author": "Jordan", "lang": "en", "source": "text",
+             "text": "Design review pipeline blocked on brand asset approval.",
+             "blockers": [("Waiting on brand asset approval", SV.high, "Design Ops", "open"),
                           ("Review tool license expired", SV.medium, None, "open")],
-             "risks": [("Approval slipping past mid-June endangers the September demo", "high",
-                        "Escalate to Tokyo PMO weekly", None)],
-             "next_steps": [("Follow up with Tokyo PMO on data approval", "Tanaka-san", dt.date(2026, 6, 15))]},
-            {"task": "Color uniformity test rig", "author": "Neeraj", "lang": "en", "source": "voice",
-             "text": "Test rig about 60 percent done, wrapping up sensor mounts by Friday.",
-             "next_steps": [("Finish remaining sensor mounts", "Neeraj", dt.date(2026, 6, 19))]},
+             "risks": [("Approval slipping past mid-June endangers the September launch", "high",
+                        "Escalate to Design Ops weekly", None)],
+             "next_steps": [("Follow up with Design Ops on asset approval", "Yamada-san", dt.date(2026, 6, 15))]},
+            {"task": "Checkout flow rework", "author": "Sam", "lang": "en", "source": "voice",
+             "text": "Checkout rework about 60 percent done, wrapping up the payment screens by Friday.",
+             "next_steps": [("Finish remaining payment screens", "Sam", dt.date(2026, 6, 19))]},
         ],
     },
     {
-        "name": "Xperia Mic Array Tuning", "name_ja": "エクスペリア マイクアレイ チューニング",
-        "owner": "Shivam", "status": S.in_progress,
+        "name": "Mobile App v2", "name_ja": "モバイルアプリ v2",
+        "owner": "Casey", "status": S.in_progress,
         "start": dt.date(2026, 5, 15), "target": dt.date(2026, 8, 31),
         "tasks": [
-            {"title": "Noise suppression model", "assignee": "Shivam", "status": S.done, "pct": 100},
-            {"title": "Field recording collection", "assignee": "Abhishake", "status": S.in_progress, "pct": 55},
+            {"title": "Push notification service", "assignee": "Casey", "status": S.done, "pct": 100},
+            {"title": "Beta feedback collection", "assignee": "Jordan", "status": S.in_progress, "pct": 55},
         ],
         "updates": [
-            {"task": "Noise suppression model", "author": "Shivam", "lang": "en", "source": "text",
-             "text": "Noise suppression model done and signed off.", "next_steps": []},
-            {"task": "Field recording collection", "author": "Abhishake", "lang": "en", "source": "text",
-             "text": "Field recording at 55 percent, on track.",
-             "risks": [("Monsoon may delay outdoor recordings next month", "medium",
-                        "Do indoor sessions as backup", None)],
-             "next_steps": [("Schedule indoor backup sessions", "Abhishake", None)]},
+            {"task": "Push notification service", "author": "Casey", "lang": "en", "source": "text",
+             "text": "Push notification service done and signed off.", "next_steps": []},
+            {"task": "Beta feedback collection", "author": "Jordan", "lang": "en", "source": "text",
+             "text": "Beta feedback collection at 55 percent, on track.",
+             "risks": [("Summer holidays may slow beta responses next month", "medium",
+                        "Recruit extra beta testers as backup", None)],
+             "next_steps": [("Recruit additional beta testers", "Jordan", None)]},
         ],
     },
     {
-        "name": "Meeting Diarization Tool", "name_ja": "会議ダイアライゼーション ツール",
-        "owner": "Jitesh", "status": S.in_progress,
+        "name": "Data Pipeline Migration", "name_ja": "データ基盤移行",
+        "owner": "Alex", "status": S.in_progress,
         "start": dt.date(2026, 6, 5), "target": dt.date(2026, 10, 15),
         "tasks": [
-            {"title": "Speaker separation module", "assignee": "Shivam", "status": S.in_progress, "pct": 40},
-            {"title": "Japanese ASR accuracy test", "title_ja": "日本語ASR精度テスト",
-             "assignee": "Abhishake", "status": S.not_started, "pct": 0},
+            {"title": "ETL cutover module", "assignee": "Casey", "status": S.in_progress, "pct": 40},
+            {"title": "Legacy data validation", "title_ja": "旧データ検証",
+             "assignee": "Jordan", "status": S.not_started, "pct": 0},
         ],
         "updates": [
-            {"task": "Speaker separation module", "author": "Shivam", "lang": "ja", "source": "voice",
-             "text": "話者分離モジュールは40パーセント。重なり音声の処理が残っています。",
-             "blockers": [("GPU server fully booked this week", SV.medium, None, "open")],
-             "next_steps": [("重なり音声の処理を行う", "Shivam", None)]},
+            {"task": "ETL cutover module", "author": "Casey", "lang": "ja", "source": "voice",
+             "text": "ETLカットオーバーモジュールは40パーセント。残りはエラー処理の実装です。",
+             "blockers": [("Staging server fully booked this week", SV.medium, None, "open")],
+             "next_steps": [("エラー処理の実装を行う", "Casey", None)]},
         ],
     },
 ]
@@ -84,22 +84,22 @@ DEMO = [
 # progress_pct, status transitions, and one blocker that opens then resolves.
 # task title -> [(days_ago, pct, status)] oldest-first, ending near the task's current values.
 HISTORY = {
-    "Color uniformity test rig": [(21, 10, "in_progress"), (17, 25, "in_progress"),
-                                  (12, 35, "in_progress"), (7, 50, "in_progress"), (2, 60, "in_progress")],
-    "Japan-side review pipeline": [(20, 5, "in_progress"), (14, 15, "in_progress"),
-                                   (8, 20, "blocked"), (3, 20, "blocked")],
-    "Calibration dataset prep": [(19, 10, "in_progress"), (11, 30, "in_progress"), (4, 45, "in_progress")],
-    "Noise suppression model": [(21, 55, "in_progress"), (15, 75, "in_progress"),
-                                (9, 90, "in_progress"), (5, 100, "done")],
-    "Field recording collection": [(18, 15, "in_progress"), (10, 35, "in_progress"), (3, 55, "in_progress")],
-    "Speaker separation module": [(16, 10, "in_progress"), (9, 25, "in_progress"), (2, 40, "in_progress")],
+    "Checkout flow rework": [(21, 10, "in_progress"), (17, 25, "in_progress"),
+                             (12, 35, "in_progress"), (7, 50, "in_progress"), (2, 60, "in_progress")],
+    "Design review pipeline": [(20, 5, "in_progress"), (14, 15, "in_progress"),
+                               (8, 20, "blocked"), (3, 20, "blocked")],
+    "Content migration": [(19, 10, "in_progress"), (11, 30, "in_progress"), (4, 45, "in_progress")],
+    "Push notification service": [(21, 55, "in_progress"), (15, 75, "in_progress"),
+                                  (9, 90, "in_progress"), (5, 100, "done")],
+    "Beta feedback collection": [(18, 15, "in_progress"), (10, 35, "in_progress"), (3, 55, "in_progress")],
+    "ETL cutover module": [(16, 10, "in_progress"), (9, 25, "in_progress"), (2, 40, "in_progress")],
 }
 
 # (task title, days_ago) -> blocker tuple attached to that history update. The same
 # description appears once "open" and later "resolved", stepping the burn-down line.
 HISTORY_BLOCKERS = {
-    ("Noise suppression model", 15): ("GPU cluster maintenance window", SV.medium, "Shivam", "open"),
-    ("Noise suppression model", 9): ("GPU cluster maintenance window", SV.medium, "Shivam", "resolved"),
+    ("Push notification service", 15): ("Staging cluster maintenance window", SV.medium, "Casey", "open"),
+    ("Push notification service", 9): ("Staging cluster maintenance window", SV.medium, "Casey", "resolved"),
 }
 
 
@@ -107,12 +107,12 @@ HISTORY_BLOCKERS = {
 # Powers the team/person rollups and the preset team picker. Names match the free-text
 # assignee/author/owner values used above; matching is by name at aggregation time.
 ORG = [
-    ("Jitesh", None, "Display Systems", "India Software Centre"),
-    ("Neeraj", None, "Display Systems", "India Software Centre"),
-    ("Shivam", None, "Speech & Audio", "India Software Centre"),
-    ("Abhishake", None, "Speech & Audio", "India Software Centre"),
-    ("Tanaka-san", "田中さん", "Japan Liaison", "Tokyo HQ"),
-    ("Sato-san", "佐藤さん", "Japan Liaison", "Tokyo HQ"),
+    ("Alex", None, "Platform", "Engineering"),
+    ("Sam", None, "Platform", "Engineering"),
+    ("Casey", None, "Mobile", "Engineering"),
+    ("Jordan", None, "Mobile", "Engineering"),
+    ("Yamada-san", "山田さん", "Product Ops", "Operations"),
+    ("Suzuki-san", "鈴木さん", "Product Ops", "Operations"),
 ]
 
 
@@ -166,8 +166,7 @@ def seed_history(db, history=HISTORY, history_blockers=HISTORY_BLOCKERS):
 
 
 def run(demo=DEMO, org=ORG, history=HISTORY, history_blockers=HISTORY_BLOCKERS):
-    """Seed the given dataset (defaults: the office demo data). seed_generic.py passes
-    its own constants through the same machinery."""
+    """Seed the given dataset (defaults: the bundled demo data)."""
     db = SessionLocal()
     try:
         seed_people(db, org)

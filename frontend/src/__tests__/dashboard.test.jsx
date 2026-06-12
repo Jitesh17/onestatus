@@ -25,26 +25,26 @@ const DASH = {
   open_blockers: 4,
   open_blockers_by_severity: { low: 0, medium: 3, high: 1 },
   open_risks: 2,
-  blockers_list: [{ description: "Tokyo approval pending", severity: "high",
-                    owner: null, task: "Review pipeline", project: "BRAVIA" }],
-  risks_list: [{ description: "Monsoon delay", impact: "medium", mitigation: null,
+  blockers_list: [{ description: "Brand approval pending", severity: "high",
+                    owner: null, task: "Review pipeline", project: "Website" }],
+  risks_list: [{ description: "Vendor delay", impact: "medium", mitigation: null,
                  owner: null, task: null, project: null }],
   recent_updates: [],
   upcoming_next_steps: [],
-  per_project: [{ id: 1, name: "BRAVIA Panel Calibration", name_ja: null,
+  per_project: [{ id: 1, name: "Website Redesign", name_ja: null,
                   status: "in_progress", owner: null, task_count: 3,
                   avg_progress: 42, open_blocker_count: 2, done_task_count: 0 }],
-  per_team: [{ team: "Display Systems", department: "ISC", members: ["Neeraj"],
+  per_team: [{ team: "Platform", department: "Engineering", members: ["Sam"],
                task_count: 3, done_task_count: 0, avg_progress: 42,
                open_blocker_count: 2 }],
-  per_person: [{ name: "Neeraj", team: "Display Systems", task_count: 3,
+  per_person: [{ name: "Sam", team: "Platform", task_count: 3,
                  done_task_count: 0, avg_progress: 42, open_blocker_count: 2,
                  next_step_count: 1 }],
   trends: { progress: [{ date: "2026-06-01", value: 40 }], blockers: [] },
 };
 
 const PRESETS = {
-  teams: ["Display Systems", "Speech & Audio"],
+  teams: ["Platform", "Mobile"],
   presets: [
     { id: "exec_summary", label: "Executive summary",
       nl_phrase: "show delivery, projects, trends and top 5 blockers",
@@ -77,17 +77,17 @@ describe("Dashboard", () => {
 
   it("applies a preset chip and substitutes the selected team", async () => {
     api.applyView.mockResolvedValue({
-      config: { team: "Display Systems", sections: [], hide: [],
-                summary: "Team view for Display Systems" },
+      config: { team: "Platform", sections: [], hide: [],
+                summary: "Team view for Platform" },
       dashboard: DASH,
     });
     const user = userEvent.setup();
     render(<Dashboard tick={0} />);
     await user.click(await screen.findByRole("button", { name: "Team view" }));
     await waitFor(() => expect(api.applyView).toHaveBeenCalledTimes(1));
-    expect(api.applyView.mock.calls[0][0].team).toBe("Display Systems");
+    expect(api.applyView.mock.calls[0][0].team).toBe("Platform");
     // The equivalent NL phrase lands in the command box, team substituted.
-    expect(screen.getByDisplayValue("focus on the Display Systems team")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("focus on the Platform team")).toBeInTheDocument();
   });
 
   it("hides sections listed in the applied config", async () => {
@@ -105,20 +105,20 @@ describe("Dashboard", () => {
 
   it("applies a saved view chip", async () => {
     api.listViews.mockResolvedValue([
-      { id: 1, name: "Blocked in BRAVIA",
-        config: { project: "BRAVIA Panel Calibration", status: "blocked" } },
+      { id: 1, name: "Blocked in Website",
+        config: { project: "Website Redesign", status: "blocked" } },
     ]);
     api.applyView.mockResolvedValue({
-      config: { project: "BRAVIA Panel Calibration", status: "blocked",
-                sections: [], hide: [], summary: "blocked in BRAVIA" },
+      config: { project: "Website Redesign", status: "blocked",
+                sections: [], hide: [], summary: "blocked in Website" },
       dashboard: DASH,
     });
     const user = userEvent.setup();
     render(<Dashboard tick={0} />);
-    await user.click(await screen.findByRole("button", { name: "Blocked in BRAVIA" }));
+    await user.click(await screen.findByRole("button", { name: "Blocked in Website" }));
     await waitFor(() => expect(api.applyView).toHaveBeenCalledWith(
-      { project: "BRAVIA Panel Calibration", status: "blocked" }));
-    expect(screen.getByText("view: blocked in BRAVIA")).toBeInTheDocument();
+      { project: "Website Redesign", status: "blocked" }));
+    expect(screen.getByText("view: blocked in Website")).toBeInTheDocument();
   });
 
   it("still renders when the presets endpoint fails", async () => {

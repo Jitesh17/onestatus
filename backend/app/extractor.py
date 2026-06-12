@@ -37,14 +37,14 @@ STATUSES = ["not_started", "in_progress", "blocked", "done"]
 SEVERITIES = ["low", "medium", "high"]
 
 # JA spellings of the known roster, so the literal-presence owner guard works on
-# Japanese text (the prompt maps katakana -> English, e.g. ニーラジ -> Neeraj).
+# Japanese text (the prompt maps katakana -> English, e.g. サム -> Sam).
 NAME_ALIASES = {
-    "Jitesh": ["ジテッシュ"],
-    "Neeraj": ["ニーラジ"],
-    "Abhishake": ["アビシェイク", "アビシェーク"],
-    "Shivam": ["シヴァム", "シバム"],
-    "Tanaka-san": ["田中", "タナカ", "Tanaka"],
-    "Sato-san": ["佐藤", "サトウ", "Sato"],
+    "Alex": ["アレックス"],
+    "Sam": ["サム"],
+    "Jordan": ["ジョーダン"],
+    "Casey": ["ケイシー", "ケーシー"],
+    "Yamada-san": ["山田", "ヤマダ", "Yamada"],
+    "Suzuki-san": ["鈴木", "スズキ", "Suzuki"],
 }
 
 
@@ -99,7 +99,7 @@ Rules:
 - If the update refers to a project NOT in the list, set "project" to "unknown" and "task" to null. Do not force a match.
 - Do not invent facts. But DO infer status and capture next steps from how the update is phrased (see below) - those are stated, just not labeled.
 - "status" is one of {STATUSES} or null. Infer it:
-    * any update that describes ongoing work or reports any progress is "in_progress", even if it never says so ("looked into X", "got the pipeline running", "Shivam is taking over") -> in_progress;
+    * any update that describes ongoing work or reports any progress is "in_progress", even if it never says so ("looked into X", "got the pipeline running", "Casey is taking over") -> in_progress;
     * "done"/"completed"/"finished"/"signed off"/"完了"/"完了し" -> done;
     * "blocked"/"stuck"/"waiting on"/"ブロック" -> blocked;
     * if the update reports a CURRENT blocker anywhere, status is "blocked" even when the work is described as basically/mostly done ("基本的にできたけど、GPUが足りなくて..." -> blocked, not done);
@@ -111,7 +111,7 @@ Rules:
     * Each risk: {{"description": str, "likelihood": str or null, "impact": str or null, "mitigation": str or null, "owner": str or null}}.
 - next_steps: the actions the update actually proposes doing next. Trigger phrases: "next", "then", "after that", "I'll", "we'll", "plan to", "going to", "should", "will", "次は", "予定", "これから", or handing work to a person; a future action counts even when it names a different known task. BUT do not invent one: if the update only describes past/current work or is vague about the future, leave next_steps []. A progress figure alone ("about half done") does NOT imply a "finish the rest" next_step. A risk's mitigation is not a next_step.
     * Each next_step: {{"description": str, "owner": str or null, "due_date": str or null}}. A compound action ("draft the test plan and send it to the reviewer") is ONE next_step (owner = the recipient when named), not two steps. Write the description in the SAME language the update is written in: an English update gets an English description. The description names the action AND the thing it applies to ("finish the remaining wiring"), never a bare verb phrase like "will be completed"; in Japanese, include the object noun, not the verb alone. Normalize explicit calendar dates to ISO YYYY-MM-DD; leave vague ones ("Friday", "金曜日") EXACTLY as written in the original language - NEVER invent a YYYY-MM-DD date that is not in the text.
-- "owners" lists only people whose name LITERALLY appears in this update as doing or receiving work, including the person who receives handed-off work ("hand to Neeraj"/"ニーラジさんに渡す"/"Xに依頼" -> that person). Match to the known-people spelling (katakana maps to English, e.g. ニーラジ -> Neeraj). If no person is named, "owners" MUST be []. Never add someone because they are on the known-people list or normally own the task. Approval or sign-off coming from a place or group ("Tokyo", "legal", "the PMO") names NO owner. The same literal-name rule applies to the "owner" field inside blockers/risks/next_steps: leave it null unless that person's name appears in the update.
+- "owners" lists only people whose name LITERALLY appears in this update as doing or receiving work, including the person who receives handed-off work ("hand to Sam"/"サムさんに渡す"/"Xに依頼" -> that person). Match to the known-people spelling (katakana maps to English, e.g. サム -> Sam). If no person is named, "owners" MUST be []. Never add someone because they are on the known-people list or normally own the task. Approval or sign-off coming from a place or group ("the head office", "legal", "the PMO") names NO owner. The same literal-name rule applies to the "owner" field inside blockers/risks/next_steps: leave it null unless that person's name appears in the update.
 - "period" is an explicit reporting period if stated (e.g. "Week of June 8"), else null.
 - "confidence" is your 0.0-1.0 confidence that the extraction is correct. Be low when the update is vague.
 - Write blocker/risk/next_step descriptions in the SAME language the update is written in: an English update gets English descriptions, a Japanese update gets Japanese descriptions. Never translate in either direction. Each description is a complete phrase (what the problem/action is), not a sentence fragment.
@@ -197,7 +197,7 @@ def _coerce(raw, world, text=""):
         o for o in raw.get("owners", []) or []
         if o in known_people and _named_in_text(o, text)
     ]
-    # A handoff recipient often lands only on the next_step ("hand to Neeraj");
+    # A handoff recipient often lands only on the next_step ("hand to Sam");
     # promote known people named there into the top-level owners list.
     for n in out["next_steps"]:
         o = n.get("owner")

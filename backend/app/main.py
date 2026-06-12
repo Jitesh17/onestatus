@@ -1,4 +1,4 @@
-"""Sony OneStatus API entrypoint (week 1).
+"""OneStatus API entrypoint (week 1).
 
 Creates tables on startup, wires CORS for the local React dev server, and
 mounts the project, task, and update routers.
@@ -15,7 +15,7 @@ from .routers import projects, tasks, updates, extract, transcribe, dashboard, v
 # API_DOCS=0 disables Swagger/ReDoc/openapi.json in deployments; the dev loop keeps them.
 _docs_on = os.getenv("API_DOCS", "1") in ("1", "true", "True")
 app = FastAPI(
-    title="Sony OneStatus API",
+    title="OneStatus API",
     version="0.1.0",
     docs_url="/docs" if _docs_on else None,
     redoc_url="/redoc" if _docs_on else None,

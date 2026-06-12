@@ -54,37 +54,37 @@ def test_scope_none_when_unset(db):
 
 
 def test_scope_person_case_insensitive(db):
-    t = _task_with_assignee(db, "Neeraj")
-    scope = crud._assignee_scope(db, {"person": "neeraj"})
+    t = _task_with_assignee(db, "Sam")
+    scope = crud._assignee_scope(db, {"person": "sam"})
     assert scope(t) is True
 
 
 def test_scope_person_mismatch(db):
-    t = _task_with_assignee(db, "Neeraj")
-    assert crud._assignee_scope(db, {"person": "Shivam"})(t) is False
+    t = _task_with_assignee(db, "Sam")
+    assert crud._assignee_scope(db, {"person": "Casey"})(t) is False
 
 
 def test_scope_unknown_team_matches_nothing(db):
-    t = _task_with_assignee(db, "Neeraj")
-    make_person(db, "Neeraj", team="Display Systems")
+    t = _task_with_assignee(db, "Sam")
+    make_person(db, "Sam", team="Platform")
     assert crud._assignee_scope(db, {"team": "Ghost Team"})(t) is False
 
 
 def test_scope_team_membership(db):
-    make_person(db, "Neeraj", team="Display Systems")
-    make_person(db, "Shivam", team="Speech & Audio")
-    scope = crud._assignee_scope(db, {"team": "display systems"})
-    assert scope(_task_with_assignee(db, "Neeraj")) is True
-    assert scope(_task_with_assignee(db, "Shivam")) is False
+    make_person(db, "Sam", team="Platform")
+    make_person(db, "Casey", team="Mobile")
+    scope = crud._assignee_scope(db, {"team": "platform"})
+    assert scope(_task_with_assignee(db, "Sam")) is True
+    assert scope(_task_with_assignee(db, "Casey")) is False
     assert scope(_task_with_assignee(db, None)) is False
 
 
 def test_scope_team_and_person_combined(db):
-    make_person(db, "Neeraj", team="Display Systems")
-    make_person(db, "Jitesh", team="Display Systems")
-    scope = crud._assignee_scope(db, {"team": "Display Systems", "person": "Neeraj"})
-    assert scope(_task_with_assignee(db, "Neeraj")) is True
-    assert scope(_task_with_assignee(db, "Jitesh")) is False
+    make_person(db, "Sam", team="Platform")
+    make_person(db, "Alex", team="Platform")
+    scope = crud._assignee_scope(db, {"team": "Platform", "person": "Sam"})
+    assert scope(_task_with_assignee(db, "Sam")) is True
+    assert scope(_task_with_assignee(db, "Alex")) is False
 
 
 # ---------- dashboard_metrics ----------
@@ -165,48 +165,48 @@ def test_metrics_next_steps_sorted_by_due_date_nulls_last(db):
 
 
 def test_metrics_team_filter_prunes_projects(db):
-    make_person(db, "Neeraj", team="Display Systems")
-    make_person(db, "Shivam", team="Speech & Audio")
+    make_person(db, "Sam", team="Platform")
+    make_person(db, "Casey", team="Mobile")
     p1, p2 = make_project(db, "P1"), make_project(db, "P2")
-    make_task(db, p1, title="A", assignee="Neeraj")
-    make_task(db, p2, title="B", assignee="Shivam")
-    m = crud.dashboard_metrics(db, {"team": "Speech & Audio"})
+    make_task(db, p1, title="A", assignee="Sam")
+    make_task(db, p2, title="B", assignee="Casey")
+    m = crud.dashboard_metrics(db, {"team": "Mobile"})
     assert m["totals"] == {"projects": 1, "tasks": 1, "updates": 0}
     assert [r["name"] for r in m["per_project"]] == ["P2"]
 
 
 def test_metrics_per_team_rollup(db):
-    make_person(db, "Neeraj", team="Display Systems", department="ISC")
-    make_person(db, "Jitesh", team="Display Systems", department="ISC")
-    make_person(db, "Shivam", team="Speech & Audio", department="ISC")
+    make_person(db, "Sam", team="Platform", department="Engineering")
+    make_person(db, "Alex", team="Platform", department="Engineering")
+    make_person(db, "Casey", team="Mobile", department="Engineering")
     p = make_project(db)
-    t1 = make_task(db, p, title="A", assignee="Neeraj", status=S.done, progress_pct=100)
-    make_task(db, p, title="B", assignee="Jitesh", status=S.in_progress, progress_pct=40)
-    make_task(db, p, title="C", assignee="Shivam", progress_pct=10)
+    t1 = make_task(db, p, title="A", assignee="Sam", status=S.done, progress_pct=100)
+    make_task(db, p, title="B", assignee="Alex", status=S.in_progress, progress_pct=40)
+    make_task(db, p, title="C", assignee="Casey", progress_pct=10)
     make_update(db, t1, blockers=[("stuck", SV.high)])
     m = crud.dashboard_metrics(db)
     teams = {r["team"]: r for r in m["per_team"]}
-    ds = teams["Display Systems"]
-    assert ds["department"] == "ISC"
-    assert sorted(ds["members"]) == ["Jitesh", "Neeraj"]
+    ds = teams["Platform"]
+    assert ds["department"] == "Engineering"
+    assert sorted(ds["members"]) == ["Alex", "Sam"]
     assert ds["task_count"] == 2 and ds["done_task_count"] == 1
     assert ds["avg_progress"] == 70 and ds["open_blocker_count"] == 1
-    assert teams["Speech & Audio"]["task_count"] == 1
+    assert teams["Mobile"]["task_count"] == 1
 
 
 def test_metrics_team_focus_narrows_team_rows(db):
-    make_person(db, "Neeraj", team="Display Systems")
-    make_person(db, "Shivam", team="Speech & Audio")
-    m = crud.dashboard_metrics(db, {"team": "Display Systems"})
-    assert [r["team"] for r in m["per_team"]] == ["Display Systems"]
-    assert [r["name"] for r in m["per_person"]] == ["Neeraj"]
+    make_person(db, "Sam", team="Platform")
+    make_person(db, "Casey", team="Mobile")
+    m = crud.dashboard_metrics(db, {"team": "Platform"})
+    assert [r["team"] for r in m["per_team"]] == ["Platform"]
+    assert [r["name"] for r in m["per_person"]] == ["Sam"]
 
 
 def test_metrics_per_person_includes_idle_roster_member(db):
-    make_person(db, "Sato-san", team="Japan Liaison")
+    make_person(db, "Suzuki-san", team="Product Ops")
     m = crud.dashboard_metrics(db)
     row = m["per_person"][0]
-    assert row["name"] == "Sato-san" and row["task_count"] == 0
+    assert row["name"] == "Suzuki-san" and row["task_count"] == 0
     assert row["avg_progress"] == 0 and row["next_step_count"] == 0
 
 
@@ -219,14 +219,14 @@ def test_metrics_per_person_unknown_assignee_gets_teamless_row(db):
 
 
 def test_metrics_per_person_blocker_dedup_and_next_steps(db):
-    make_person(db, "Neeraj", team="Display Systems")
+    make_person(db, "Sam", team="Platform")
     p = make_project(db)
-    t = make_task(db, p, assignee="Neeraj")
-    # Same blocker visible via Neeraj's own task AND owned by Neeraj: counts once.
-    make_update(db, t, blockers=[("stuck", SV.high, "Neeraj")],
-                next_steps=[("do thing", "Neeraj", None), ("other", "Shivam", None)])
+    t = make_task(db, p, assignee="Sam")
+    # Same blocker visible via Sam's own task AND owned by Sam: counts once.
+    make_update(db, t, blockers=[("stuck", SV.high, "Sam")],
+                next_steps=[("do thing", "Sam", None), ("other", "Casey", None)])
     m = crud.dashboard_metrics(db)
-    row = next(r for r in m["per_person"] if r["name"] == "Neeraj")
+    row = next(r for r in m["per_person"] if r["name"] == "Sam")
     assert row["open_blocker_count"] == 1
     assert row["next_step_count"] == 1
 

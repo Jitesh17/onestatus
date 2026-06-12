@@ -1,6 +1,6 @@
 """Natural-language dashboard reconfiguration (week 6).
 
-Turns a short command ("only blocked tasks in BRAVIA", "hide risks, top 3 blockers by
+Turns a short command ("only blocked tasks in Website Redesign", "hide risks, top 3 blockers by
 severity") into a validated ViewConfig dict that crud.dashboard_metrics applies. Reuses
 the same local LLM (Ollama JSON mode) as the extractor, grounded in the known projects.
 """
@@ -50,11 +50,11 @@ trends (charts over time).
 
 Return JSON with exactly these keys:
 - "project": the FULL known project name the request focuses on, or null for all. Match abbreviations
-  to the full name (e.g. "BRAVIA" or "bravia" -> "BRAVIA Panel Calibration").
+  to the full name (e.g. "redesign" or "the website project" -> "Website Redesign").
 - "team": the FULL known team name ONLY when the request asks about that team's work
-  ("the Speech & Audio team", "Display Systems status"). Else null. Never guess a team for "my team".
+  ("the Mobile team", "Platform status"). Else null. Never guess a team for "my team".
 - "person": the FULL known person name ONLY when the request asks about one person's tasks or
-  workload ("Neeraj's tasks" -> "Neeraj"; "what is Shivam working on" -> "Shivam"). A possessive
+  workload ("Sam's tasks" -> "Sam"; "what is Casey working on" -> "Casey"). A possessive
   name always sets person. A person mentioned as a blocker owner or in passing is NOT a focus.
   Else null.
 - "status": one of {STATUSES} when the request focuses on a task status, else null.
@@ -65,7 +65,7 @@ Return JSON with exactly these keys:
 - "sections": sections to SHOW ONLY (subset above). Use ["blockers"] for "just blockers";
   "workload per person" / "per person" -> ["per_person"]; "by team" / "team breakdown" -> ["per_team"].
   Leave [] when the request only filters (project/status/severity/team/person) or only sorts --
-  "focus on Xperia" -> sections []; "focus on the Display Systems team" -> team set, sections [].
+  "focus on Mobile App v2" -> sections []; "focus on the Platform team" -> team set, sections [].
   NEVER narrow sections unless the user names which section(s) they want to see.
 - "hide": sections to REMOVE. "hide risks" -> ["risks"]. "drop the project table" -> ["per_project"]. Else [].
 - "sort": one of {SORTS} or null. "by severity"/"most severe"->"severity"; "newest"/"latest"->"recent";
@@ -111,7 +111,7 @@ def _match_team(value, world):
 
 
 def _match_person(value, world):
-    """Map a name (possibly missing an honorific, e.g. "tanaka") to a known person, or None."""
+    """Map a name (possibly missing an honorific, e.g. "yamada") to a known person, or None."""
     if not value:
         return None
     names = world.get("people", [])
@@ -136,7 +136,7 @@ def _explicit_team(request, team):
 
 
 def _explicit_person(request, person):
-    """The matched person's base token must literally appear ("tanaka" matches "Tanaka-san")."""
+    """The matched person's base token must literally appear ("yamada" matches "Yamada-san")."""
     t = (request or "").lower()
     return bool(person) and person.split("-")[0].lower() in t
 

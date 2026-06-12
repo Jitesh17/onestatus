@@ -1,11 +1,11 @@
-# Sony OneStatus evaluation dataset
+# OneStatus evaluation dataset
 
 This is the labeled data we use to judge whether the local model extracts status
 updates well enough, especially in Japanese. It is the basis for the week 3 go/no-go
 decision on model size.
 
-All data here is synthetic. No real Sony project data is used, which keeps it safe to
-work with off the internal server during early development.
+All data here is synthetic. No real project data is used, which keeps it safe to
+work with anywhere during early development.
 
 ## Files
 
@@ -24,10 +24,10 @@ work with off the internal server during early development.
   "situation": "multiple blockers plus a risk",
   "language": "en",
   "source": "text",
-  "input_text": "Japan-side review pipeline is stuck...",
+  "input_text": "Design review pipeline is stuck...",
   "expected": {
-    "project": "BRAVIA Panel Calibration",
-    "task": "Japan-side review pipeline",
+    "project": "Website Redesign",
+    "task": "Design review pipeline",
     "status": "blocked",
     "progress_pct": null,
     "blockers": [{"description": "...", "severity": "high", "owner": null}],
@@ -64,8 +64,8 @@ The point is not volume, it is coverage of the cases that break extractors:
 - An explicit reporting period, taking the latest progress value (ex_021)
 - Code-switching between English and Japanese in both directions (ex_016, ex_017)
 
-The code-switching and katakana-name cases are the India-Japan reality and are the ones
-most worth watching during the week 3 check.
+The code-switching and katakana-name cases are the bilingual-team reality and are the
+ones most worth watching during the week 3 check.
 
 ## How to use it
 

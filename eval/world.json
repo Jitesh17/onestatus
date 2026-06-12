@@ -1,36 +1,36 @@
 {
   "people": [
-    "Jitesh",
-    "Neeraj",
-    "Abhishake",
-    "Shivam",
-    "Tanaka-san",
-    "Sato-san"
+    "Alex",
+    "Sam",
+    "Casey",
+    "Jordan",
+    "Yamada-san",
+    "Suzuki-san"
   ],
   "projects": [
     {
-      "name": "BRAVIA Panel Calibration",
-      "name_ja": "ブラビア パネル キャリブレーション",
+      "name": "Website Redesign",
+      "name_ja": "ウェブサイト刷新",
       "tasks": [
-        "Color uniformity test rig",
-        "Japan-side review pipeline",
-        "Calibration dataset prep"
+        "Checkout flow rework",
+        "Design review pipeline",
+        "Content migration"
       ]
     },
     {
-      "name": "Xperia Mic Array Tuning",
-      "name_ja": "エクスペリア マイクアレイ チューニング",
+      "name": "Mobile App v2",
+      "name_ja": "モバイルアプリ v2",
       "tasks": [
-        "Noise suppression model",
-        "Field recording collection"
+        "Push notification service",
+        "Beta feedback collection"
       ]
     },
     {
-      "name": "Meeting Diarization Tool",
-      "name_ja": "会議ダイアライゼーション ツール",
+      "name": "Data Pipeline Migration",
+      "name_ja": "データ基盤移行",
       "tasks": [
-        "Speaker separation module",
-        "Japanese ASR accuracy test"
+        "ETL cutover module",
+        "Legacy data validation"
       ]
     }
   ]

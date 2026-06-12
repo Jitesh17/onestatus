@@ -25,9 +25,9 @@ def _ollama_up():
 
 # ---------- /extract ----------
 def test_extract_resolves_task_id(client, db):
-    p = make_project(db, "BRAVIA Panel Calibration")
-    t = make_task(db, p, title="Color uniformity test rig")
-    raw = {"project": "BRAVIA Panel Calibration", "task": "Color uniformity test rig",
+    p = make_project(db, "Website Redesign")
+    t = make_task(db, p, title="Checkout flow rework")
+    raw = {"project": "Website Redesign", "task": "Checkout flow rework",
            "status": "in_progress", "progress_pct": 70, "confidence": 0.9}
     with patch("app.extractor.ollama_json", return_value=raw):
         r = client.post("/extract", json={"raw_text": "rig at 70 percent"})
@@ -39,7 +39,7 @@ def test_extract_resolves_task_id(client, db):
 
 
 def test_extract_unknown_flags(client, db):
-    make_project(db, "BRAVIA Panel Calibration")
+    make_project(db, "Website Redesign")
     raw = {"project": "Walkman Revival", "task": "Mystery task"}
     with patch("app.extractor.ollama_json", return_value=raw):
         r = client.post("/extract", json={"raw_text": "something unrelated"})
@@ -51,13 +51,13 @@ def test_extract_unknown_flags(client, db):
 
 
 def test_extract_project_backfilled_from_matched_task(client, db):
-    p = make_project(db, "Meeting Diarization Tool")
-    make_task(db, p, title="Speaker separation module")
-    raw = {"project": "unknown", "task": "Speaker separation module", "status": "blocked"}
+    p = make_project(db, "Data Pipeline Migration")
+    make_task(db, p, title="ETL cutover module")
+    raw = {"project": "unknown", "task": "ETL cutover module", "status": "blocked"}
     with patch("app.extractor.ollama_json", return_value=raw):
         r = client.post("/extract", json={"raw_text": "speaker separation is stuck"})
     body = r.json()
-    assert body["project"] == "Meeting Diarization Tool"
+    assert body["project"] == "Data Pipeline Migration"
     assert body["unknown_project"] is False
 
 
@@ -89,11 +89,11 @@ def test_extract_live_smoke(client, seeded):
     if not _ollama_up():
         pytest.skip("Ollama not running")
     r = client.post("/extract", json={
-        "raw_text": "Color uniformity test rig is about 70 percent done now."})
+        "raw_text": "Checkout flow rework is about 70 percent done now."})
     assert r.status_code == 200
     body = r.json()
-    assert body["project"] == "BRAVIA Panel Calibration"
-    assert body["task"] == "Color uniformity test rig"
+    assert body["project"] == "Website Redesign"
+    assert body["task"] == "Checkout flow rework"
     assert body["progress_pct"] == 70
 
 

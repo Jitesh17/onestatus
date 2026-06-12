@@ -8,13 +8,13 @@ def test_health_ok(client):
 
 
 def test_project_round_trip(client):
-    r = client.post("/projects", json={"name": "BRAVIA Panel Calibration",
-                                       "name_ja": "ブラビア", "owner": "Jitesh"})
+    r = client.post("/projects", json={"name": "Website Redesign",
+                                       "name_ja": "ウェブサイト刷新", "owner": "Alex"})
     assert r.status_code in (200, 201)
     pid = r.json()["id"]
     listed = client.get("/projects").json()
     assert [p["id"] for p in listed] == [pid]
-    assert listed[0]["name_ja"] == "ブラビア"
+    assert listed[0]["name_ja"] == "ウェブサイト刷新"
 
 
 def test_task_round_trip_and_project_filter(client):
@@ -31,10 +31,10 @@ def test_update_with_nested_items(client):
     p = client.post("/projects", json={"name": "P"}).json()
     t = client.post("/tasks", json={"project_id": p["id"], "title": "T"}).json()
     r = client.post("/updates", json={
-        "task_id": t["id"], "author": "Neeraj", "raw_text": "stuck on license",
+        "task_id": t["id"], "author": "Sam", "raw_text": "stuck on license",
         "blockers": [{"description": "License expired", "severity": "high"}],
         "risks": [{"description": "Slip risk", "impact": "high"}],
-        "next_steps": [{"description": "Renew license", "owner": "Neeraj",
+        "next_steps": [{"description": "Renew license", "owner": "Sam",
                         "due_date": "2026-06-20"}],
     })
     assert r.status_code in (200, 201)
@@ -66,8 +66,8 @@ def test_update_without_snapshot_leaves_task(client):
 
 
 def test_views_crud(client):
-    r = client.post("/views", json={"name": "Blocked in BRAVIA",
-                                    "config": {"project": "BRAVIA", "status": "blocked"}})
+    r = client.post("/views", json={"name": "Blocked in Website",
+                                    "config": {"project": "Website", "status": "blocked"}})
     assert r.status_code == 201
     vid = r.json()["id"]
     listed = client.get("/views").json()

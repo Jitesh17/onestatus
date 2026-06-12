@@ -35,7 +35,7 @@ export default function App() {
   return (
     <>
       <div className="bar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span><b>Sony OneStatus</b> &nbsp;·&nbsp; Voice-first bilingual status</span>
+        <span><b>OneStatus</b> &nbsp;·&nbsp; Voice-first bilingual status</span>
         <span className="tabs">
           <button className={view === "dashboard" ? "on" : ""} onClick={() => setView("dashboard")}>Dashboard</button>
           <button className={view === "capture" ? "on" : ""} onClick={() => setView("capture")}>Capture</button>

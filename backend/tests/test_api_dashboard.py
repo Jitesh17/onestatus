@@ -36,11 +36,11 @@ def test_dashboard_empty_db_200(client):
 
 
 def test_presets_shape(client, db):
-    make_person(db, "Neeraj", team="Display Systems")
+    make_person(db, "Sam", team="Platform")
     r = client.get("/dashboard/presets")
     assert r.status_code == 200
     body = r.json()
-    assert body["teams"] == ["Display Systems"]
+    assert body["teams"] == ["Platform"]
     assert len(body["presets"]) == 6
     needs_team = [p for p in body["presets"] if p["needs_team"]]
     assert len(needs_team) == 2
@@ -79,14 +79,14 @@ def test_apply_old_shape_config_still_works(client, db):
 
 
 def test_configure_mocked_llm(client, db):
-    make_project(db, "BRAVIA Panel Calibration")
-    raw = {"project": "BRAVIA", "status": "blocked", "summary": "blocked in BRAVIA"}
+    make_project(db, "Website Redesign")
+    raw = {"project": "Website", "status": "blocked", "summary": "blocked in Website"}
     with patch("app.view_interpreter.ollama_json", return_value=raw):
         r = client.post("/dashboard/configure",
-                        json={"request": "only blocked tasks in BRAVIA"})
+                        json={"request": "only blocked tasks in Website"})
     assert r.status_code == 200
     cfg = r.json()["config"]
-    assert cfg["project"] == "BRAVIA Panel Calibration"
+    assert cfg["project"] == "Website Redesign"
     assert cfg["status"] == "blocked"
 
 
@@ -104,8 +104,8 @@ def test_configure_live_smoke(client, seeded):
     if not _ollama_up():
         pytest.skip("Ollama not running")
     r = client.post("/dashboard/configure",
-                    json={"request": "only blocked tasks in BRAVIA"})
+                    json={"request": "only blocked tasks in Website"})
     assert r.status_code == 200
     cfg = r.json()["config"]
-    assert cfg["project"] == "BRAVIA Panel Calibration"
+    assert cfg["project"] == "Website Redesign"
     assert cfg["status"] == "blocked"

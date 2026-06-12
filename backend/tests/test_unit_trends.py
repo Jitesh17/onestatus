@@ -79,14 +79,14 @@ def test_trends_inverted_range_empty(db):
 
 
 def test_trends_respect_person_scope(db):
-    make_person(db, "Neeraj", team="Display Systems")
+    make_person(db, "Sam", team="Platform")
     p = make_project(db)
-    t1 = make_task(db, p, title="mine", assignee="Neeraj")
-    t2 = make_task(db, p, title="theirs", assignee="Shivam")
+    t1 = make_task(db, p, title="mine", assignee="Sam")
+    t2 = make_task(db, p, title="theirs", assignee="Casey")
     make_update(db, t1, created_at=days_ago(2), progress_pct=40)
     make_update(db, t2, created_at=days_ago(2), progress_pct=90)
-    series = crud.trend_series(db, {"person": "Neeraj"})["progress"]
-    assert series[-1]["value"] == 40  # Shivam's 90 excluded
+    series = crud.trend_series(db, {"person": "Sam"})["progress"]
+    assert series[-1]["value"] == 40  # Casey's 90 excluded
 
 
 def test_trends_respect_project_filter(db):

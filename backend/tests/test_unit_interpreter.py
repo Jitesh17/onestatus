@@ -3,31 +3,31 @@ _coerce takes the raw dict the model would have produced."""
 from app import view_interpreter as vi
 
 WORLD = {
-    "projects": [{"name": "BRAVIA Panel Calibration", "name_ja": "ブラビア", "tasks": []},
-                 {"name": "Xperia Mic Array Tuning", "name_ja": None, "tasks": []}],
-    "people": ["Jitesh", "Neeraj", "Shivam", "Tanaka-san"],
-    "teams": [{"name": "Display Systems", "members": ["Jitesh", "Neeraj"]},
-              {"name": "Speech & Audio", "members": ["Shivam"]}],
+    "projects": [{"name": "Website Redesign", "name_ja": "ウェブサイト刷新", "tasks": []},
+                 {"name": "Mobile App v2", "name_ja": None, "tasks": []}],
+    "people": ["Alex", "Sam", "Casey", "Yamada-san"],
+    "teams": [{"name": "Platform", "members": ["Alex", "Sam"]},
+              {"name": "Mobile", "members": ["Casey"]}],
 }
 
 
 # ---------- matchers ----------
 def test_match_project_abbreviation():
-    assert vi._match_project("BRAVIA", WORLD) == "BRAVIA Panel Calibration"
-    assert vi._match_project("bravia", WORLD) == "BRAVIA Panel Calibration"
+    assert vi._match_project("Website", WORLD) == "Website Redesign"
+    assert vi._match_project("website", WORLD) == "Website Redesign"
     assert vi._match_project("Unknown Thing", WORLD) is None
     assert vi._match_project(None, WORLD) is None
 
 
 def test_match_team_partial():
-    assert vi._match_team("display", WORLD) == "Display Systems"
-    assert vi._match_team("Speech & Audio", WORLD) == "Speech & Audio"
+    assert vi._match_team("plat", WORLD) == "Platform"
+    assert vi._match_team("Mobile", WORLD) == "Mobile"
     assert vi._match_team("Ghost", WORLD) is None
 
 
 def test_match_person_honorific_base_token():
-    assert vi._match_person("tanaka", WORLD) == "Tanaka-san"
-    assert vi._match_person("Neeraj", WORLD) == "Neeraj"
+    assert vi._match_person("yamada", WORLD) == "Yamada-san"
+    assert vi._match_person("Sam", WORLD) == "Sam"
     assert vi._match_person("nobody", WORLD) is None
 
 
@@ -71,28 +71,28 @@ def test_invalid_section_names_dropped():
 
 # ---------- team / person guards ----------
 def test_team_kept_when_request_names_it():
-    out = vi._coerce({"team": "Speech & Audio"}, WORLD,
-                     request="focus on the Speech & Audio team")
-    assert out["team"] == "Speech & Audio"
+    out = vi._coerce({"team": "Mobile"}, WORLD,
+                     request="focus on the Mobile team")
+    assert out["team"] == "Mobile"
 
 
 def test_team_dropped_when_invented():
-    out = vi._coerce({"team": "Display Systems"}, WORLD, request="how are things")
+    out = vi._coerce({"team": "Platform"}, WORLD, request="how are things")
     assert out["team"] is None
 
 
 def test_person_possessive_kept():
-    out = vi._coerce({"person": "Neeraj"}, WORLD, request="Neeraj's tasks")
-    assert out["person"] == "Neeraj"
+    out = vi._coerce({"person": "Sam"}, WORLD, request="Sam's tasks")
+    assert out["person"] == "Sam"
 
 
 def test_person_base_token_matches_honorific():
-    out = vi._coerce({"person": "tanaka"}, WORLD, request="what is tanaka working on")
-    assert out["person"] == "Tanaka-san"
+    out = vi._coerce({"person": "yamada"}, WORLD, request="what is yamada working on")
+    assert out["person"] == "Yamada-san"
 
 
 def test_person_dropped_when_invented():
-    out = vi._coerce({"person": "Shivam"}, WORLD, request="overall status please")
+    out = vi._coerce({"person": "Casey"}, WORLD, request="overall status please")
     assert out["person"] is None
 
 

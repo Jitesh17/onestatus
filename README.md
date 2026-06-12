@@ -1,4 +1,4 @@
-# Sony OneStatus
+# OneStatus
 
 Voice-first bilingual project status tracker.
 
@@ -29,7 +29,7 @@ which mode is active.
 
 ## Screenshots
 
-Taken with the neutral sample dataset (`backend/app/seed_generic.py`).
+Taken with the bundled demo dataset (`backend/app/seed_demo.py`).
 
 The manager dashboard: KPIs, blockers and risks, per-project rollup, and trend charts.
 
@@ -99,8 +99,8 @@ cd backend
 ```
 
 `seed_demo` loads three demo projects with three weeks of backdated history so the trend
-charts have a story. Use `app.seed` instead for a minimal dataset, or `app.seed_generic`
-for the neutral sample data shown in the screenshots above. API docs at
+charts have a story; it is the dataset shown in the screenshots above. Use `app.seed`
+instead for a minimal dataset. API docs at
 http://localhost:8000/docs (disabled in deployments via `API_DOCS=0`).
 
 4. Frontend, in a second terminal:
@@ -149,7 +149,7 @@ backend/.venv/bin/python eval/run_eval.py --provider openai --model gpt-4o-mini 
 ```
 
 Current headline with the default local model: 0.97 average per-field accuracy
-(EN 0.97, JA 0.98) on 22 examples. Internal test set; treat it as directional rather
+(EN 0.97, JA 0.96) on 22 examples. Internal test set; treat it as directional rather
 than a guarantee.
 
 ## Project layout
@@ -170,7 +170,6 @@ backend/
     transcriber.py      faster-whisper wrapper, live-reloadable
     seed.py             minimal demo data
     seed_demo.py        richer demo data + 3 weeks of backdated history
-    seed_generic.py     neutral sample data, used for the README screenshots
     routers/            projects, tasks, updates, extract, transcribe, dashboard, views, settings
   Dockerfile            python:3.11-slim image, non-root, healthcheck
 assets/                 README screenshots

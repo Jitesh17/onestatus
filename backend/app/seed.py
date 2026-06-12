@@ -18,9 +18,9 @@ def run():
             return
 
         p = models.Project(
-            name="BRAVIA Panel Calibration",
-            name_ja="ブラビア パネル キャリブレーション",
-            owner="Jitesh",
+            name="Website Redesign",
+            name_ja="ウェブサイト刷新",
+            owner="Alex",
             status=models.Status.in_progress,
             start_date=dt.date(2026, 6, 1),
             target_date=dt.date(2026, 9, 30),
@@ -28,22 +28,22 @@ def run():
         db.add(p)
         db.flush()
 
-        t1 = models.Task(project_id=p.id, title="Color uniformity test rig",
-                         assignee="Neeraj", status=models.Status.in_progress, progress_pct=60)
-        t2 = models.Task(project_id=p.id, title="Japan-side review pipeline",
-                         title_ja="日本側レビュー パイプライン",
-                         assignee="Abhishake", status=models.Status.blocked, progress_pct=20)
+        t1 = models.Task(project_id=p.id, title="Checkout flow rework",
+                         assignee="Sam", status=models.Status.in_progress, progress_pct=60)
+        t2 = models.Task(project_id=p.id, title="Design review pipeline",
+                         title_ja="デザインレビュー パイプライン",
+                         assignee="Jordan", status=models.Status.blocked, progress_pct=20)
         db.add_all([t1, t2])
         db.flush()
 
         u = models.Update(
-            task_id=t2.id, author="Abhishake", language="en", source="text",
-            raw_text="Review pipeline blocked on sample data access from Japan side.",
+            task_id=t2.id, author="Jordan", language="en", source="text",
+            raw_text="Design review pipeline blocked on brand asset approval.",
         )
-        u.blockers = [models.Blocker(description="Waiting on sample data approval from Tokyo",
-                                     severity=models.Severity.high, owner="Tokyo PMO")]
-        u.next_steps = [models.NextStep(description="Follow up with Tokyo PMO on data approval",
-                                        owner="Jitesh", due_date=dt.date(2026, 6, 15))]
+        u.blockers = [models.Blocker(description="Waiting on brand asset approval",
+                                     severity=models.Severity.high, owner="Design Ops")]
+        u.next_steps = [models.NextStep(description="Follow up with Design Ops on asset approval",
+                                        owner="Alex", due_date=dt.date(2026, 6, 15))]
         db.add(u)
         db.commit()
         print("Seed complete.")

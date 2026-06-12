@@ -9,7 +9,7 @@ from .factories import make_person
 # ---------- presets ----------
 def test_preset_configs_validate_as_viewconfig():
     for p in presets.PRESETS:
-        cfg = {k: (v.replace("{team}", "Display Systems") if isinstance(v, str) else v)
+        cfg = {k: (v.replace("{team}", "Platform") if isinstance(v, str) else v)
                for k, v in p["config"].items()}
         validated = schemas.ViewConfig(**cfg)
         assert all(s in ("delivery per_project per_team per_person blockers risks "
@@ -26,11 +26,11 @@ def test_preset_ids_unique_and_needs_team_consistent():
 
 
 def test_get_presets_teams_from_roster(db):
-    make_person(db, "Neeraj", team="Display Systems")
-    make_person(db, "Jitesh", team="Display Systems")
-    make_person(db, "Shivam", team="Speech & Audio")
+    make_person(db, "Sam", team="Platform")
+    make_person(db, "Alex", team="Platform")
+    make_person(db, "Casey", team="Mobile")
     out = presets.get_presets(db)
-    assert out["teams"] == ["Display Systems", "Speech & Audio"]
+    assert out["teams"] == ["Platform", "Mobile"]
     assert len(out["presets"]) == 6
 
 
@@ -53,9 +53,9 @@ def test_seed_demo_idempotent(db):
 
 
 def test_seed_people_skips_existing(db):
-    make_person(db, "Neeraj", team="Custom Team")
+    make_person(db, "Sam", team="Custom Team")
     seed_demo.seed_people(db)
-    row = db.query(models.Person).filter(models.Person.name == "Neeraj").one()
+    row = db.query(models.Person).filter(models.Person.name == "Sam").one()
     assert row.team == "Custom Team"  # untouched
     assert db.query(models.Person).count() == 6
 

@@ -1,4 +1,4 @@
-"""ORM models for the Sony OneStatus data model.
+"""ORM models for the OneStatus data model.
 
 These are the canonical entities the rest of the system reads and writes.
 Week 1 covers manual entry, so every field here is set by a human via the UI.
