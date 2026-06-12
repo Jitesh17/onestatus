@@ -1,0 +1,16 @@
+# NVIDIA GPU passthrough for Ollama. Requires the nvidia-container-toolkit on
+# the host (INSTALL.md step 2). Use as an overlay:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+# Speech transcription stays on CPU inside the container; only the language
+# model uses the GPU.
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

@@ -10,6 +10,12 @@ COPY . .
 RUN npm run build
 
 FROM nginx:alpine
+# htpasswd (apache2-utils) generates the basic-auth file when APP_PASSWORD is set.
+RUN apk add --no-cache apache2-utils \
+    && mkdir -p /etc/nginx/snippets \
+    && touch /etc/nginx/snippets/auth.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker-entrypoint.d/40-basic-auth.sh /docker-entrypoint.d/40-basic-auth.sh
+RUN chmod +x /docker-entrypoint.d/40-basic-auth.sh
 COPY --from=build /src/dist /usr/share/nginx/html
 EXPOSE 80

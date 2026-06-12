@@ -12,7 +12,15 @@ from .database import Base, SessionLocal, engine
 from . import config, models, migrate  # noqa: F401  (import registers models on Base before create_all)
 from .routers import projects, tasks, updates, extract, transcribe, dashboard, views, settings
 
-app = FastAPI(title="Sony OneStatus API", version="0.1.0")
+# API_DOCS=0 disables Swagger/ReDoc/openapi.json in deployments; the dev loop keeps them.
+_docs_on = os.getenv("API_DOCS", "1") in ("1", "true", "True")
+app = FastAPI(
+    title="Sony OneStatus API",
+    version="0.1.0",
+    docs_url="/docs" if _docs_on else None,
+    redoc_url="/redoc" if _docs_on else None,
+    openapi_url="/openapi.json" if _docs_on else None,
+)
 
 # Week 1: create_all is enough. Move to Alembic migrations once the schema settles.
 # create_all never ALTERs existing tables, so migrate.run adds any new nullable columns.

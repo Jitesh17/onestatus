@@ -1,10 +1,10 @@
-# NVIDIA GPU passthrough for Ollama. Requires the nvidia-container-toolkit on the
-# host (see docs/DEPLOYMENT.md). Use as an overlay:
+# NVIDIA GPU passthrough for Ollama. Requires the nvidia-container-toolkit on
+# the host (see deploy/INSTALL.md step 2). Use as an overlay:
 #
 #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 #
 # Whisper stays on CPU inside the container (the CUDA runtime libraries would
-# roughly double the backend image); cloud or host-GPU options are in the docs.
+# roughly double the backend image); the language model is what uses the GPU.
 services:
   ollama:
     deploy:

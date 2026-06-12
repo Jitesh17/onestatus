@@ -1,0 +1,45 @@
+# Builds and pushes the two app images to GHCR on every push to main.
+# The office machine (and any future one) deploys by pulling these images;
+# it never needs this repo checked out beyond the deploy/ folder.
+name: release-images
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+          - name: frontend
+            context: ./frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          # amd64 for the office Ubuntu box, arm64 for Mac-local runs of the
+          # same deploy compose file.
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/jitesh17/onestatus-${{ matrix.name }}:latest
+            ghcr.io/jitesh17/onestatus-${{ matrix.name }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max

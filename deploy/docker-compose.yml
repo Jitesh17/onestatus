@@ -1,0 +1,66 @@
+# OneStatus deployment from prebuilt images. This folder is everything a
+# deployment machine needs; see INSTALL.md.
+#
+#   cp .env.example .env        # set APP_PASSWORD before anything else
+#   docker compose up -d
+#   docker compose exec ollama ollama pull qwen2.5:7b   # one-time, ~4.7 GB
+#   open http://localhost:8080
+#
+# Update to the latest release:
+#   docker compose pull && docker compose up -d
+#
+# Postgres instead of SQLite: set DATABASE_URL in .env and start with
+#   docker compose --profile postgres up -d
+# NVIDIA GPU for Ollama: see INSTALL.md.
+services:
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  backend:
+    image: ghcr.io/jitesh17/onestatus-backend:latest
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/onestatus.db}
+      OLLAMA_URL: http://ollama:11434
+      SEED_ON_START: ${SEED_ON_START:-1}
+      API_DOCS: "0"
+    volumes:
+      - app_data:/data
+      - whisper_cache:/cache/hf
+    depends_on:
+      ollama:
+        condition: service_healthy
+    # No host port: the API is reachable only through the frontend proxy.
+
+  frontend:
+    image: ghcr.io/jitesh17/onestatus-frontend:latest
+    ports: ["${FRONTEND_PORT:-8080}:80"]
+    environment:
+      APP_USER: ${APP_USER:-onestatus}
+      APP_PASSWORD: ${APP_PASSWORD:-}
+    depends_on: [backend]
+
+  db:
+    image: postgres:16
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-onestatus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-onestatus}
+      POSTGRES_DB: ${POSTGRES_DB:-onestatus}
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+
+volumes:
+  ollama_models:
+  app_data:
+  whisper_cache:
+  pgdata:

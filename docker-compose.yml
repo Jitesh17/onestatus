@@ -30,19 +30,27 @@ services:
       DATABASE_URL: ${DATABASE_URL:-sqlite:////data/onestatus.db}
       OLLAMA_URL: http://ollama:11434
       SEED_ON_START: ${SEED_ON_START:-1}
+      # No Swagger/openapi in deployments; only nginx fronts the API.
+      API_DOCS: ${API_DOCS:-0}
     volumes:
       - app_data:/data
       - whisper_cache:/cache/hf
     depends_on:
       ollama:
         condition: service_healthy
-    # Optional: expose the API on the host for curl/debugging.
-    ports: ["8000:8000"]
+    # The API is reachable only through the frontend's /api proxy. For local
+    # debugging, uncomment to bind it to this machine only (never 0.0.0.0):
+    # ports: ["127.0.0.1:8000:8000"]
 
   frontend:
     build: ./frontend
     # FRONTEND_PORT in .env moves the app when 8080 is taken on the host.
     ports: ["${FRONTEND_PORT:-8080}:80"]
+    environment:
+      # Set APP_PASSWORD in .env to require a login for everything (app + API).
+      # Empty = open; fine for localhost, not for a shared network.
+      APP_USER: ${APP_USER:-onestatus}
+      APP_PASSWORD: ${APP_PASSWORD:-}
     depends_on: [backend]
 
   db:
@@ -52,7 +60,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-onestatus}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-onestatus}
       POSTGRES_DB: ${POSTGRES_DB:-onestatus}
-    ports: ["${POSTGRES_PORT:-5432}:5432"]
+    # The backend reaches postgres on the compose network; no host port needed.
+    # For psql from this machine, uncomment (bind to localhost only):
+    # ports: ["127.0.0.1:${POSTGRES_PORT:-5432}:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
 
 volumes:
