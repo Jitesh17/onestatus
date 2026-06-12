@@ -35,11 +35,21 @@ def fresh_db():
     """Empty schema per test. drop_all + create_all is milliseconds on temp SQLite,
     and unlike transaction rollback it survives the commits crud does internally.
     The settings singleton is mutable at runtime (PUT /settings), so it is reset
-    to env defaults too; without this a provider switch leaks between tests."""
+    to env defaults too; without this a provider switch leaks between tests.
+
+    Auth sprint: every test starts with one account per role (username == role,
+    password "pw") so client fixtures can log in. Tests that need an empty users
+    table (bootstrap) delete these rows first."""
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     from app.config import settings as app_settings
     app_settings.reload_from_env()
+    from app import auth, models
+    with SessionLocal() as s:
+        pw = auth.hash_password("pw")
+        for role in ("admin", "manager", "member"):
+            s.add(models.User(username=role, password_hash=pw, role=role))
+        s.commit()
     yield
 
 
@@ -52,16 +62,43 @@ def db():
         s.close()
 
 
+def login(client, username, password="pw"):
+    r = client.post("/auth/login", json={"username": username, "password": password})
+    assert r.status_code == 200, f"test login as {username!r} failed: {r.text}"
+    return client
+
+
 @pytest.fixture
-def client():
+def client(fresh_db):
+    """Admin-authenticated client: the pre-auth default, so the existing endpoint
+    tests keep exercising business logic without 401 noise."""
     with TestClient(app) as c:
-        yield c
+        yield login(c, "admin")
 
 
 @pytest.fixture
-def relaxed_client():
-    """Client that returns 500s instead of raising, for never-500 assertions."""
+def relaxed_client(fresh_db):
+    """Admin client that returns 500s instead of raising, for never-500 assertions."""
     with TestClient(app, raise_server_exceptions=False) as c:
+        yield login(c, "admin")
+
+
+@pytest.fixture
+def manager_client(fresh_db):
+    with TestClient(app) as c:
+        yield login(c, "manager")
+
+
+@pytest.fixture
+def member_client(fresh_db):
+    with TestClient(app) as c:
+        yield login(c, "member")
+
+
+@pytest.fixture
+def anon_client(fresh_db):
+    """No session cookie: for 401 and login-flow tests."""
+    with TestClient(app) as c:
         yield c
 
 

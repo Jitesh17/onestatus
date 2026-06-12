@@ -124,8 +124,8 @@ class TestLoginAPI:
         _user(db, "alice", is_active=False)
         assert _login(client, "alice").status_code == 401
 
-    def test_me_requires_login(self, client):
-        assert client.get("/auth/me").status_code == 401
+    def test_me_requires_login(self, anon_client):
+        assert anon_client.get("/auth/me").status_code == 401
 
     def test_me_after_login(self, client, db):
         person = models.Person(name="Alice A")
@@ -138,11 +138,11 @@ class TestLoginAPI:
         assert body["person_id"] == person.id
 
     def test_logout_revokes_session(self, client, db):
-        _user(db, "alice")
+        alice = _user(db, "alice")
         _login(client, "alice")
         assert client.post("/auth/logout").status_code == 204
         assert client.get("/auth/me").status_code == 401
-        assert db.query(models.AuthSession).count() == 0
+        assert db.query(models.AuthSession).filter_by(user_id=alice.id).count() == 0
 
     def test_change_my_password(self, client, db):
         _user(db, "alice")
@@ -172,18 +172,13 @@ class TestLoginAPI:
 
 
 class TestUsersAdminAPI:
-    def _admin_client(self, client, db):
-        _user(db, "boss", role="admin")
-        _login(client, "boss")
-        return client
+    # The `client` fixture is already logged in as the seeded admin.
 
-    def test_member_cannot_list_users(self, client, db):
-        _user(db, "alice")
-        _login(client, "alice")
-        assert client.get("/auth/users").status_code == 403
+    def test_member_cannot_list_users(self, member_client):
+        assert member_client.get("/auth/users").status_code == 403
 
     def test_admin_crud_roundtrip(self, client, db):
-        c = self._admin_client(client, db)
+        c = client
         r = c.post("/auth/users", json={
             "username": "sam", "password": "password1", "role": "member",
         })
@@ -195,20 +190,20 @@ class TestUsersAdminAPI:
         assert c.delete(f"/auth/users/{uid}").status_code == 204
 
     def test_duplicate_username_409(self, client, db):
-        c = self._admin_client(client, db)
+        c = client
         body = {"username": "sam", "password": "password1"}
         assert c.post("/auth/users", json=body).status_code == 201
         assert c.post("/auth/users", json=body).status_code == 409
 
     def test_unknown_person_id_422(self, client, db):
-        c = self._admin_client(client, db)
+        c = client
         r = c.post("/auth/users", json={
             "username": "sam", "password": "password1", "person_id": 999,
         })
         assert r.status_code == 422
 
     def test_clear_person_link(self, client, db):
-        c = self._admin_client(client, db)
+        c = client
         person = models.Person(name="Sam S")
         db.add(person)
         db.commit()
@@ -219,14 +214,14 @@ class TestUsersAdminAPI:
         assert r.json()["person_id"] is None
 
     def test_last_admin_cannot_be_demoted(self, client, db):
-        c = self._admin_client(client, db)
+        c = client
         boss_id = c.get("/auth/me").json()["id"]
         assert c.put(f"/auth/users/{boss_id}", json={"role": "member"}).status_code == 409
         assert c.put(f"/auth/users/{boss_id}", json={"is_active": False}).status_code == 409
         assert c.delete(f"/auth/users/{boss_id}").status_code == 409
 
     def test_second_admin_unlocks_demotion(self, client, db):
-        c = self._admin_client(client, db)
+        c = client
         boss_id = c.get("/auth/me").json()["id"]
         c.post("/auth/users", json={
             "username": "boss2", "password": "password1", "role": "admin",
@@ -236,7 +231,7 @@ class TestUsersAdminAPI:
     def test_deactivation_kills_live_sessions(self, client, db):
         from fastapi.testclient import TestClient
         from app.main import app
-        c = self._admin_client(client, db)
+        c = client
         uid = c.post("/auth/users", json={
             "username": "sam", "password": "password1",
         }).json()["id"]
@@ -247,7 +242,7 @@ class TestUsersAdminAPI:
             assert sam.get("/auth/me").status_code == 401
 
     def test_admin_resets_user_password(self, client, db):
-        c = self._admin_client(client, db)
+        c = client
         uid = c.post("/auth/users", json={
             "username": "sam", "password": "password1",
         }).json()["id"]
@@ -260,8 +255,15 @@ class TestUsersAdminAPI:
             assert _login(sam, "sam", "password2").status_code == 200
 
 
+def _empty_users(db):
+    # Bootstrap only acts on an EMPTY users table; drop the conftest role accounts.
+    db.query(models.User).delete()
+    db.commit()
+
+
 class TestBootstrap:
     def test_creates_admin_from_env(self, db, monkeypatch):
+        _empty_users(db)
         monkeypatch.setenv("ADMIN_PASSWORD", "bootpass1")
         monkeypatch.setenv("ADMIN_USER", "chief")
         create_admin.bootstrap_admin(db)
@@ -270,6 +272,7 @@ class TestBootstrap:
         assert auth.verify_password("bootpass1", user.password_hash)
 
     def test_no_env_warns_and_creates_nothing(self, db, monkeypatch, caplog):
+        _empty_users(db)
         monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
         with caplog.at_level("WARNING", logger="onestatus.auth"):
             create_admin.bootstrap_admin(db)
@@ -277,10 +280,12 @@ class TestBootstrap:
         assert any("ADMIN_PASSWORD" in r.message for r in caplog.records)
 
     def test_never_touches_populated_table(self, db, monkeypatch):
-        _user(db, "existing")
         monkeypatch.setenv("ADMIN_PASSWORD", "bootpass1")
+        monkeypatch.setenv("ADMIN_USER", "chief")
+        before = db.query(models.User).count()
         create_admin.bootstrap_admin(db)
-        assert db.query(models.User).count() == 1
+        assert db.query(models.User).count() == before
+        assert db.query(models.User).filter_by(username="chief").first() is None
 
 
 class TestCreateAdminCLI:
