@@ -490,8 +490,8 @@ def list_views(db: Session):
     return db.query(models.SavedView).order_by(models.SavedView.id).all()
 
 
-def create_view(db: Session, name: str, config: dict):
-    obj = models.SavedView(name=name, config=_json.dumps(config))
+def create_view(db: Session, name: str, config: dict, created_by: int | None = None):
+    obj = models.SavedView(name=name, config=_json.dumps(config), created_by=created_by)
     db.add(obj)
     db.commit()
     db.refresh(obj)
@@ -510,4 +510,4 @@ def delete_view(db: Session, view_id: int) -> bool:
 def view_to_dict(obj):
     """Decode a SavedView row into the SavedViewOut shape (config as a dict)."""
     return {"id": obj.id, "name": obj.name, "config": _json.loads(obj.config),
-            "created_at": obj.created_at}
+            "created_at": obj.created_at, "created_by": obj.created_by}

@@ -13,7 +13,7 @@ import urllib.request
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from .. import schemas, transcriber
+from .. import auth, models, schemas, transcriber
 from ..config import settings, WHISPER_SIZES
 from ..database import get_db
 
@@ -35,7 +35,11 @@ def get_settings():
 
 
 @router.put("", response_model=schemas.SettingsOut)
-def put_settings(data: schemas.SettingsUpdate, db: Session = Depends(get_db)):
+def put_settings(
+    data: schemas.SettingsUpdate,
+    db: Session = Depends(get_db),
+    _: models.User = Depends(auth.require_admin),
+):
     changes = data.model_dump(exclude_unset=True, exclude_none=True)
     settings.apply_overrides(changes)
     settings.save_to_db(db)
@@ -46,7 +50,7 @@ def put_settings(data: schemas.SettingsUpdate, db: Session = Depends(get_db)):
 
 
 @router.get("/models", response_model=schemas.ModelsOut)
-def list_models():
+def list_models(_: models.User = Depends(auth.require_admin)):
     """Installed Ollama models + the fixed whisper size list.
 
     An unreachable Ollama is normal in cloud-API mode, so it is a warning in

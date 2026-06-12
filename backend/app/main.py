@@ -5,11 +5,11 @@ mounts the project, task, and update routers.
 """
 import os
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .database import Base, SessionLocal, engine
-from . import config, models, migrate  # noqa: F401  (import registers models on Base before create_all)
+from . import auth, config, models, migrate  # noqa: F401  (import registers models on Base before create_all)
 from .create_admin import bootstrap_admin
 from .routers import auth as auth_router
 from .routers import projects, tasks, updates, extract, transcribe, dashboard, views, settings
@@ -54,15 +54,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Default-deny: every data router requires a logged-in user at include time, so a
+# new endpoint cannot ship open by accident. /auth manages its own access (login is
+# public, the rest authenticated) and stricter floors are raised per endpoint.
+_member = [Depends(auth.require_member)]
 app.include_router(auth_router.router)
-app.include_router(projects.router)
-app.include_router(tasks.router)
-app.include_router(updates.router)
-app.include_router(extract.router)
-app.include_router(transcribe.router)
-app.include_router(dashboard.router)
-app.include_router(views.router)
-app.include_router(settings.router)
+app.include_router(projects.router, dependencies=_member)
+app.include_router(tasks.router, dependencies=_member)
+app.include_router(updates.router, dependencies=_member)
+app.include_router(extract.router, dependencies=_member)
+app.include_router(transcribe.router, dependencies=_member)
+app.include_router(dashboard.router, dependencies=_member)
+app.include_router(views.router, dependencies=_member)
+app.include_router(settings.router, dependencies=_member)
 
 
 @app.get("/health", tags=["meta"])

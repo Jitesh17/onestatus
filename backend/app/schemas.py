@@ -346,6 +346,7 @@ class SavedViewOut(BaseModel):
     name: str
     config: ViewConfig
     created_at: dt.datetime
+    created_by: int | None = None       # user id; null = shared/pre-auth view
 
 
 # ---------- Runtime settings (provider/model configuration) ----------
