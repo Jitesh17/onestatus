@@ -392,6 +392,19 @@ class ModelsOut(BaseModel):
     warning: str | None = None
 
 
+# ---------- People (org roster; managed in the Admin tab since the auth sprint) ----------
+class PersonIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    name_ja: str | None = Field(default=None, max_length=120)
+    team: str | None = Field(default=None, max_length=120)
+    department: str | None = Field(default=None, max_length=120)
+
+
+class PersonOut(PersonIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+
+
 # ---------- Auth (auth sprint) ----------
 # bcrypt hashes at most 72 BYTES; the schema cap keeps longer passwords from being
 # silently truncated. max_length counts characters, so multibyte input is re-checked

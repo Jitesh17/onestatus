@@ -12,7 +12,7 @@ from .database import Base, SessionLocal, engine
 from . import auth, config, models, migrate  # noqa: F401  (import registers models on Base before create_all)
 from .create_admin import bootstrap_admin
 from .routers import auth as auth_router
-from .routers import projects, tasks, updates, extract, transcribe, dashboard, views, settings
+from .routers import projects, tasks, updates, extract, transcribe, dashboard, views, settings, people
 
 # API_DOCS=0 disables Swagger/ReDoc/openapi.json in deployments; the dev loop keeps them.
 _docs_on = os.getenv("API_DOCS", "1") in ("1", "true", "True")
@@ -67,6 +67,7 @@ app.include_router(transcribe.router, dependencies=_member)
 app.include_router(dashboard.router, dependencies=_member)
 app.include_router(views.router, dependencies=_member)
 app.include_router(settings.router, dependencies=_member)
+app.include_router(people.router, dependencies=_member)
 
 
 @app.get("/health", tags=["meta"])
