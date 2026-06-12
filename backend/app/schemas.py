@@ -389,3 +389,60 @@ class ModelsOut(BaseModel):
     ollama_models: list[str] = []
     whisper_sizes: list[str] = []
     warning: str | None = None
+
+
+# ---------- Auth (auth sprint) ----------
+# bcrypt hashes at most 72 BYTES; the schema cap keeps longer passwords from being
+# silently truncated. max_length counts characters, so multibyte input is re-checked
+# in the router before hashing.
+PASSWORD_MAX = 72
+
+
+class LoginIn(BaseModel):
+    username: str = Field(max_length=80)
+    password: str = Field(max_length=PASSWORD_MAX)
+
+
+class MeOut(BaseModel):
+    """The logged-in identity the SPA gates on. `author` is the display name the
+    server will write on this user's updates (linked person, else username)."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    username: str
+    role: str
+    person_id: int | None = None
+    author: str
+
+
+class PasswordChangeIn(BaseModel):
+    current_password: str = Field(max_length=PASSWORD_MAX)
+    new_password: str = Field(min_length=8, max_length=PASSWORD_MAX)
+
+
+class UserCreate(BaseModel):
+    username: str = Field(min_length=1, max_length=80)
+    password: str = Field(min_length=8, max_length=PASSWORD_MAX)
+    role: Literal["member", "manager", "admin"] = "member"
+    person_id: int | None = None
+
+
+class UserUpdate(BaseModel):
+    """Partial admin update; only the fields present are changed."""
+    role: Literal["member", "manager", "admin"] | None = None
+    person_id: int | None = None
+    is_active: bool | None = None
+    clear_person: bool = False          # person_id=None means "leave alone", so unlinking is explicit
+
+
+class UserPasswordSet(BaseModel):
+    new_password: str = Field(min_length=8, max_length=PASSWORD_MAX)
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    username: str
+    role: str
+    person_id: int | None = None
+    is_active: bool
+    created_at: dt.datetime

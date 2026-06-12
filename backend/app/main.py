@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database import Base, SessionLocal, engine
 from . import config, models, migrate  # noqa: F401  (import registers models on Base before create_all)
+from .create_admin import bootstrap_admin
+from .routers import auth as auth_router
 from .routers import projects, tasks, updates, extract, transcribe, dashboard, views, settings
 
 # API_DOCS=0 disables Swagger/ReDoc/openapi.json in deployments; the dev loop keeps them.
@@ -28,8 +30,11 @@ Base.metadata.create_all(bind=engine)
 migrate.run(engine)
 
 # Persisted settings (provider/model choices from the UI) override env defaults.
+# First boot of the auth sprint: create the initial admin from ADMIN_PASSWORD
+# (empty users table only; warns loudly when neither accounts nor env exist).
 with SessionLocal() as _db:
     config.settings.load_from_db(_db)
+    bootstrap_admin(_db)
 
 # Docker first boot: seed the demo data when the flag is set and the DB is empty.
 if os.getenv("SEED_ON_START", "0") in ("1", "true", "True"):
@@ -49,6 +54,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router.router)
 app.include_router(projects.router)
 app.include_router(tasks.router)
 app.include_router(updates.router)

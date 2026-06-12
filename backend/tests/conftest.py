@@ -16,6 +16,8 @@ if _BACKEND not in sys.path:
 
 _TMPDIR = tempfile.mkdtemp(prefix="onestatus-tests-")
 os.environ["DATABASE_URL"] = f"sqlite:///{os.path.join(_TMPDIR, 'test.db')}"
+# Cheap bcrypt for tests: cost 4 instead of 12. Read at call time by app.auth.
+os.environ["BCRYPT_ROUNDS"] = "4"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

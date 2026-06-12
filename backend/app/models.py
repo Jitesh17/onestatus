@@ -130,6 +130,46 @@ class SavedView(Base):
     name: Mapped[str] = mapped_column(String(120))
     config: Mapped[str] = mapped_column(Text)  # JSON-encoded ViewConfig
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+    # Auth sprint: who saved it. Nullable so pre-auth views stay valid; NULL means
+    # "shared/legacy" and only manager+ may delete those.
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+# Role hierarchy for access checks: a floor of "manager" admits manager and admin.
+ROLE_ORDER = {"member": 0, "manager": 1, "admin": 2}
+
+
+class User(Base):
+    """Local login account (auth sprint). Auth is app-managed on the office server by
+    design: no cloud IdP. `person_id` links an account to the org roster so updates
+    are authored under the person's display name; author columns elsewhere stay free
+    text and are matched by name, same as before auth existed.
+    """
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(80), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(128))
+    role: Mapped[str] = mapped_column(String(20), default="member")  # member|manager|admin
+    person_id: Mapped[int | None] = mapped_column(ForeignKey("people.id"), nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+
+    person: Mapped["Person | None"] = relationship()
+
+
+class AuthSession(Base):
+    """Server-side login session. The cookie carries an opaque random token; only its
+    SHA-256 hex lands here, so a copied DB file yields no live sessions. Logout and
+    admin revocation are row deletes.
+    """
+    __tablename__ = "sessions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime)
+
+    user: Mapped["User"] = relationship()
 
 
 class AppSetting(Base):
