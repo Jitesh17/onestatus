@@ -1,7 +1,7 @@
 """Unit tests for presets, seed_demo idempotency, and the startup column migration."""
 from sqlalchemy import text
 
-from app import crud, migrate, models, presets, schemas, seed_demo
+from app import auth, crud, migrate, models, presets, schemas, seed_demo
 from app.database import engine
 from .factories import make_person
 
@@ -66,6 +66,29 @@ def test_seeded_dashboard_has_history_and_rollups(seeded):
     assert len(m["trends"]["progress"]) > 10
     assert len(m["per_team"]) == 3
     assert len(m["per_person"]) == 6
+
+
+# ---------- demo accounts ----------
+def test_run_never_seeds_users_without_flag(db, monkeypatch):
+    monkeypatch.delenv("SEED_DEMO_USERS", raising=False)
+    before = db.query(models.User).count()  # conftest's admin/manager/member
+    seed_demo.run()
+    assert db.query(models.User).count() == before
+
+
+def test_seed_users_links_people_and_is_idempotent(db):
+    seed_demo.seed_people(db)
+    seed_demo.seed_users(db)
+    # "admin" already exists from conftest and is never touched; the rest are added.
+    alex = db.query(models.User).filter_by(username="alex").one()
+    assert alex.role == "manager"
+    assert db.get(models.Person, alex.person_id).name == "Alex"
+    sam = db.query(models.User).filter_by(username="sam").one()
+    assert sam.role == "member"
+    assert auth.verify_password("demo", sam.password_hash)
+    count = db.query(models.User).count()
+    seed_demo.seed_users(db)
+    assert db.query(models.User).count() == count
 
 
 # ---------- migrate ----------

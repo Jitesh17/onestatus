@@ -33,8 +33,10 @@ folder; step 3 shows how to start with it.
 cp .env.example .env
 ```
 
-Edit `.env` and set `APP_PASSWORD`. The app refuses nobody without it; do not
-skip this on a shared network.
+Edit `.env` and set `ADMIN_PASSWORD` before the first start. It creates the
+first admin account on first boot (empty user table only); without it the app
+starts with no accounts and nobody can log in. Optionally also set
+`APP_PASSWORD` for an extra basic-auth prompt in front of the app login.
 
 ```bash
 docker compose up -d
@@ -48,9 +50,16 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```
 
 The model pull is one-time (about 4.7 GB, kept on a volume). Open
-http://localhost:8080 and log in with the user and password from `.env`.
+http://localhost:8080 and log in as `admin` with the `ADMIN_PASSWORD` from
+`.env`, then create the team's accounts from the Admin tab.
 The first voice transcription downloads the speech model (about 1.5 GB);
 later requests take seconds.
+
+Forgot the admin password, or started without one? Reset it from the host:
+
+```bash
+docker compose exec backend python -m app.create_admin
+```
 
 ## 4. Operations
 
@@ -83,6 +92,7 @@ docker compose down -v
 | Symptom | Fix |
 |---|---|
 | Port 8080 already in use | set `FRONTEND_PORT` in `.env`, `docker compose up -d` |
-| Login prompt loops | password changed in `.env` needs `docker compose up -d` to re-create the frontend container |
+| Cannot log in / no admin account | `docker compose exec backend python -m app.create_admin` |
+| Basic-auth prompt loops | `APP_PASSWORD` changed in `.env` needs `docker compose up -d` to re-create the frontend container |
 | Extraction errors mention the model | run the `ollama pull` command from step 3 |
 | First voice request very slow | one-time speech model download; wait it out once |

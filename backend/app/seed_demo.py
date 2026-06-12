@@ -8,6 +8,8 @@ carrying blockers, risks, and next steps. The README screenshots use this datase
 Run from the backend folder:  python -m app.seed_demo
 """
 import datetime as dt
+import os
+
 from .database import SessionLocal, Base, engine
 from . import models, migrate
 
@@ -132,6 +134,39 @@ def seed_people(db, org=ORG):
         print("Org roster already present, nothing added.")
 
 
+# ---------- Demo login accounts (auth sprint) ----------
+# Gated behind SEED_DEMO_USERS=1 and never on by default, so upgrading an existing
+# deployment can never silently grow an admin/admin account. Usernames match the
+# roster above; members get linked to their Person row so updates post under that name.
+DEMO_USERS = [
+    # (username, password, role, linked person name)
+    ("admin", "admin", "admin", None),
+    ("alex", "demo", "manager", "Alex"),
+    ("sam", "demo", "member", "Sam"),
+    ("casey", "demo", "member", "Casey"),
+    ("jordan", "demo", "member", "Jordan"),
+]
+
+
+def seed_users(db, users=DEMO_USERS):
+    """Idempotent by username: an account already in the table is never touched."""
+    from . import auth  # local import: bcrypt work only happens when the flag is on
+    existing = {u.username for u in db.query(models.User).all()}
+    people = {p.name: p.id for p in db.query(models.Person).all()}
+    added = 0
+    for username, password, role, person in users:
+        if username in existing:
+            continue
+        db.add(models.User(username=username, password_hash=auth.hash_password(password),
+                           role=role, person_id=people.get(person)))
+        added += 1
+    db.commit()
+    if added:
+        print(f"Demo accounts seeded: {added} (demo passwords; never use on real data).")
+    else:
+        print("Demo accounts already present, nothing added.")
+
+
 def _ago(days: int) -> dt.datetime:
     return (dt.datetime.utcnow() - dt.timedelta(days=days)).replace(
         hour=10, minute=0, second=0, microsecond=0)
@@ -170,6 +205,8 @@ def run(demo=DEMO, org=ORG, history=HISTORY, history_blockers=HISTORY_BLOCKERS):
     db = SessionLocal()
     try:
         seed_people(db, org)
+        if os.getenv("SEED_DEMO_USERS", "0") in ("1", "true", "True"):
+            seed_users(db)
         existing = {p.name for p in db.query(models.Project).all()}
         added = 0
         for d in demo:

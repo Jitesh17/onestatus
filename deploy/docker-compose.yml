@@ -1,7 +1,7 @@
 # OneStatus deployment from prebuilt images. This folder is everything a
 # deployment machine needs; see INSTALL.md.
 #
-#   cp .env.example .env        # set APP_PASSWORD before anything else
+#   cp .env.example .env        # set ADMIN_PASSWORD before anything else
 #   docker compose up -d
 #   docker compose exec ollama ollama pull qwen2.5:7b   # one-time, ~4.7 GB
 #   open http://localhost:8080
@@ -33,6 +33,13 @@ services:
       DATABASE_URL: ${DATABASE_URL:-sqlite:////data/onestatus.db}
       OLLAMA_URL: http://ollama:11434
       SEED_ON_START: ${SEED_ON_START:-1}
+      # First admin account, created only when the users table is empty.
+      # Set ADMIN_PASSWORD in .env before the first start.
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # 1 adds demo login accounts (admin/admin, alex, sam, ...). Demos only;
+      # never enable on a deployment holding real data.
+      SEED_DEMO_USERS: ${SEED_DEMO_USERS:-0}
       API_DOCS: "0"
     volumes:
       - app_data:/data

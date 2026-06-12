@@ -30,6 +30,13 @@ services:
       DATABASE_URL: ${DATABASE_URL:-sqlite:////data/onestatus.db}
       OLLAMA_URL: http://ollama:11434
       SEED_ON_START: ${SEED_ON_START:-1}
+      # First admin account, created only when the users table is empty.
+      # Set ADMIN_PASSWORD in .env before the first start.
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # 1 adds demo login accounts (admin/admin, alex, sam, ...). Demos only;
+      # never enable on a deployment holding real data.
+      SEED_DEMO_USERS: ${SEED_DEMO_USERS:-0}
       # No Swagger/openapi in deployments; only nginx fronts the API.
       API_DOCS: ${API_DOCS:-0}
     volumes:
@@ -47,8 +54,8 @@ services:
     # FRONTEND_PORT in .env moves the app when 8080 is taken on the host.
     ports: ["${FRONTEND_PORT:-8080}:80"]
     environment:
-      # Set APP_PASSWORD in .env to require a login for everything (app + API).
-      # Empty = open; fine for localhost, not for a shared network.
+      # Optional extra gate in front of the app's own login (basic auth at
+      # nginx). Empty = no extra prompt; the app login still applies.
       APP_USER: ${APP_USER:-onestatus}
       APP_PASSWORD: ${APP_PASSWORD:-}
     depends_on: [backend]

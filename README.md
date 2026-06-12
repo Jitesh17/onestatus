@@ -24,7 +24,11 @@ which mode is active.
 - Settings panel (gear icon): switch the LLM provider (local Ollama, OpenAI-compatible,
   Anthropic), pick any installed Ollama model, change the Whisper size and device, all live
   with no restart
-- Optional login (basic auth at nginx) gating the whole deployed app
+- Local accounts with roles (admin, manager, member): login is handled by the app on
+  your own server, no cloud identity service. Members post under their own name;
+  managers can also create projects and tasks and post for others
+- Admin tab: manage accounts and the people roster from the UI
+- Optional second gate (basic auth at nginx) in front of the app login
 - Light and dark theme, remembered across sessions
 
 ## Screenshots
@@ -66,8 +70,26 @@ faster-whisper
 Prebuilt multi-arch images are published to GHCR by CI on every push to main
 (`ghcr.io/jitesh17/onestatus-backend`, `ghcr.io/jitesh17/onestatus-frontend`).
 Copy the `deploy/` folder to the target machine and follow
-[deploy/INSTALL.md](deploy/INSTALL.md). Set `APP_PASSWORD` in `.env` before starting;
-it gates the app, the API, and the settings panel.
+[deploy/INSTALL.md](deploy/INSTALL.md). Set `ADMIN_PASSWORD` in `.env` before the
+first start; it creates the first admin account, and everything else is managed
+from the Admin tab after logging in.
+
+### Login and roles
+
+Every deployment requires a login. Accounts live in the app's own database on your
+server; there is no external identity provider.
+
+| Role | Can do |
+|---|---|
+| member | post updates under their own name, view dashboards, save views |
+| manager | member rights, plus create projects and tasks, post for others, delete any saved view |
+| admin | manager rights, plus manage accounts, the people roster, and settings |
+
+The first admin comes from `ADMIN_PASSWORD` on first boot (empty database only).
+If you are ever locked out: `docker compose exec backend python -m app.create_admin`
+resets or creates an admin from the host. For demos, `SEED_DEMO_USERS=1` seeds
+throwaway accounts: `admin`/`admin`, manager `alex` and members `sam`, `casey`,
+`jordan` (password `demo`). Never enable it on real data.
 
 ### Dev loop
 
@@ -94,12 +116,14 @@ ollama serve
 
 ```bash
 cd backend
-.venv/bin/python -m app.seed_demo
+SEED_DEMO_USERS=1 .venv/bin/python -m app.seed_demo
 .venv/bin/uvicorn app.main:app --reload --port 8000
 ```
 
 `seed_demo` loads three demo projects with three weeks of backdated history so the trend
-charts have a story; it is the dataset shown in the screenshots above. Use `app.seed`
+charts have a story; it is the dataset shown in the screenshots above. The
+`SEED_DEMO_USERS=1` flag adds demo login accounts (log in as `admin`/`admin`); without
+it, set `ADMIN_PASSWORD` when starting uvicorn to create the first admin. Use `app.seed`
 instead for a minimal dataset. API docs at
 http://localhost:8000/docs (disabled in deployments via `API_DOCS=0`).
 
@@ -124,9 +148,17 @@ exist as env vars; see [.env.example](.env.example).
 
 ## API endpoints
 
+All endpoints except `/health` and the login itself require a session cookie;
+roles raise the bar further (creating projects and tasks needs manager, settings
+and account management need admin).
+
 | Method | Path | Purpose |
 |---|---|---|
 | GET | /health | liveness check |
+| POST | /auth/login, /auth/logout | start / end a session (HttpOnly cookie) |
+| GET / PUT | /auth/me, /auth/me/password | who am I / change own password |
+| CRUD | /auth/users | account management (admin) |
+| GET + CRUD | /people | org roster; reads for all, writes admin |
 | GET / POST | /projects | list / create projects |
 | GET / POST | /tasks | list / create tasks (GET supports ?project_id=) |
 | GET / POST | /updates | list / create status updates with nested items |
@@ -163,6 +195,8 @@ backend/
     migrate.py          additive column migration (create_all never ALTERs)
     models.py           SQLAlchemy ORM models
     schemas.py          Pydantic request/response shapes
+    auth.py             password hashing, server-side sessions, role dependencies
+    create_admin.py     first-admin bootstrap + lockout-recovery CLI
     crud.py             database logic, dashboard aggregation, trend series
     llm.py              provider dispatch: Ollama / OpenAI-compatible / Anthropic
     extractor.py        update-text extraction prompt + draft normalization
@@ -170,13 +204,13 @@ backend/
     transcriber.py      faster-whisper wrapper, live-reloadable
     seed.py             minimal demo data
     seed_demo.py        richer demo data + 3 weeks of backdated history
-    routers/            projects, tasks, updates, extract, transcribe, dashboard, views, settings
+    routers/            auth, people, projects, tasks, updates, extract, transcribe, dashboard, views, settings
   Dockerfile            python:3.11-slim image, non-root, healthcheck
 assets/                 README screenshots
 eval/                   labeled dataset + scoring harness (local vs cloud comparable)
 frontend/
   src/
-    App.jsx             dashboard, capture, review screen, NL command bar, settings panel
+    App.jsx             login, dashboard, capture, review screen, NL command bar, admin tab, settings panel
     api.js              API client
     main.jsx            entry + theme variables and styles
   Dockerfile            node build stage into nginx (+ optional basic auth)
