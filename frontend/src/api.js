@@ -1,4 +1,8 @@
 // Thin API client. All calls go through the Vite proxy at /api.
+// The session cookie rides along automatically (fetch sends same-origin
+// cookies by default). When any call comes back 401, api.onUnauthorized
+// fires so the app can drop to the login screen; the login call itself is
+// excluded since a wrong password is handled inline on the form.
 const base = "/api";
 
 async function req(path, options = {}) {
@@ -7,6 +11,7 @@ async function req(path, options = {}) {
     ...options,
   });
   if (!res.ok) {
+    if (res.status === 401 && !path.startsWith("/auth/login")) api.onUnauthorized?.();
     // Surface FastAPI's `detail` (e.g. the 503 "Ollama unreachable" message) when present.
     let detail = "";
     try { detail = (await res.json())?.detail || ""; } catch { /* non-JSON body */ }
@@ -19,6 +24,7 @@ async function req(path, options = {}) {
 async function upload(path, formData) {
   const res = await fetch(base + path, { method: "POST", body: formData });
   if (!res.ok) {
+    if (res.status === 401) api.onUnauthorized?.();
     let detail = "";
     try { detail = (await res.json())?.detail || ""; } catch { /* non-JSON body */ }
     throw new Error(detail || `${res.status} ${res.statusText}`);
@@ -27,6 +33,20 @@ async function upload(path, formData) {
 }
 
 export const api = {
+  onUnauthorized: null, // assigned by App; called on any 401 outside login
+  login: (data) => req("/auth/login", { method: "POST", body: JSON.stringify(data) }),
+  logout: () => req("/auth/logout", { method: "POST" }),
+  me: () => req("/auth/me"),
+  changePassword: (data) => req("/auth/me/password", { method: "PUT", body: JSON.stringify(data) }),
+  listUsers: () => req("/auth/users"),
+  createUser: (data) => req("/auth/users", { method: "POST", body: JSON.stringify(data) }),
+  updateUser: (id, data) => req(`/auth/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  setUserPassword: (id, data) => req(`/auth/users/${id}/password`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteUser: (id) => req(`/auth/users/${id}`, { method: "DELETE" }),
+  listPeople: () => req("/people"),
+  createPerson: (data) => req("/people", { method: "POST", body: JSON.stringify(data) }),
+  updatePerson: (id, data) => req(`/people/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deletePerson: (id) => req(`/people/${id}`, { method: "DELETE" }),
   listProjects: () => req("/projects"),
   createProject: (data) => req("/projects", { method: "POST", body: JSON.stringify(data) }),
   listTasks: (projectId) => req(`/tasks${projectId ? `?project_id=${projectId}` : ""}`),

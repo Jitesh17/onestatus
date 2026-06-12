@@ -4,6 +4,20 @@ import { vi } from "vitest";
 
 vi.mock("../api.js", () => ({
   api: {
+    onUnauthorized: null,
+    me: vi.fn(),
+    login: vi.fn(),
+    logout: vi.fn(),
+    changePassword: vi.fn(),
+    listUsers: vi.fn(),
+    createUser: vi.fn(),
+    updateUser: vi.fn(),
+    setUserPassword: vi.fn(),
+    deleteUser: vi.fn(),
+    listPeople: vi.fn(),
+    createPerson: vi.fn(),
+    updatePerson: vi.fn(),
+    deletePerson: vi.fn(),
     listProjects: vi.fn(),
     createProject: vi.fn(),
     listTasks: vi.fn(),
@@ -52,9 +66,14 @@ const DEFAULT_SETTINGS = {
   whisper_beam: 5, whisper_vad: true,
 };
 
+const ADMIN_ME = { id: 1, username: "admin", role: "admin", person_id: null, author: "admin" };
+
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  api.me.mockResolvedValue(ADMIN_ME);
+  api.listPeople.mockResolvedValue([]);
+  api.listUsers.mockResolvedValue([ADMIN_ME]);
   api.listProjects.mockResolvedValue([]);
   api.listTasks.mockResolvedValue([]);
   api.listUpdates.mockResolvedValue([]);
@@ -84,6 +103,8 @@ describe("App", () => {
   it("theme toggle flips the document theme and persists it", async () => {
     const user = userEvent.setup();
     render(<App />);
+    // The session check renders nothing until /auth/me resolves.
+    await screen.findByTitle("Switch theme");
     expect(document.documentElement.dataset.theme).toBe("light");
 
     await user.click(screen.getByTitle("Switch theme"));

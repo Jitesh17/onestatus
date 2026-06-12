@@ -3,11 +3,15 @@ import { api } from "./api.js";
 
 const STATUS = ["not_started", "in_progress", "blocked", "done"];
 const SEVERITY = ["low", "medium", "high"];
+const ROLE_ORDER = { member: 0, manager: 1, admin: 2 };
+const isManagerUp = (me) => !!me && ROLE_ORDER[me.role] >= ROLE_ORDER.manager;
 
 export default function App() {
+  const [me, setMe] = useState(undefined); // undefined = checking, null = logged out
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [updates, setUpdates] = useState([]);
+  const [people, setPeople] = useState([]);
   const [error, setError] = useState("");
   const [view, setView] = useState("dashboard");
   const [dashTick, setDashTick] = useState(0); // bump to refetch the dashboard after a save
@@ -20,6 +24,13 @@ export default function App() {
     localStorage.setItem("onestatus.theme", theme);
   }, [theme]);
 
+  // Session gate: any 401 anywhere drops back to the login screen.
+  useEffect(() => {
+    api.onUnauthorized = () => setMe(null);
+    api.me().then(setMe).catch(() => setMe(null));
+    return () => { api.onUnauthorized = null; };
+  }, []);
+
   async function refresh() {
     try {
       const [p, t, u] = await Promise.all([api.listProjects(), api.listTasks(), api.listUpdates()]);
@@ -29,9 +40,40 @@ export default function App() {
     }
     setDashTick(x => x + 1);
   }
-  useEffect(() => { refresh(); }, []);
-  useEffect(() => { api.getSettings().then(setSettings).catch(() => { /* badge simply hidden */ }); }, []);
+  useEffect(() => {
+    if (!me) return;
+    refresh();
+    api.getSettings().then(setSettings).catch(() => { /* badge simply hidden */ });
+    api.listPeople().then(setPeople).catch(() => { /* author dropdown simply empty */ });
+  }, [me?.id]);
 
+  async function logout() {
+    try { await api.logout(); } catch { /* session may already be gone */ }
+    setMe(null); setView("dashboard"); setShowSettings(false);
+  }
+
+  if (me === undefined) return null; // checking the session; avoid a login flash
+
+  if (me === null) {
+    return (
+      <>
+        <div className="bar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span><b>OneStatus</b> &nbsp;·&nbsp; Voice-first bilingual status</span>
+          <span className="tabs">
+            <button className="themetoggle" title="Switch theme"
+              onClick={() => setTheme(t => (t === "light" ? "dark" : "light"))}>
+              {theme === "light" ? "🌙" : "☀️"}
+            </button>
+          </span>
+        </div>
+        <div className="wrap">
+          <LoginPage onLogin={setMe} />
+        </div>
+      </>
+    );
+  }
+
+  const admin = me.role === "admin";
   return (
     <>
       <div className="bar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -39,17 +81,26 @@ export default function App() {
         <span className="tabs">
           <button className={view === "dashboard" ? "on" : ""} onClick={() => setView("dashboard")}>Dashboard</button>
           <button className={view === "capture" ? "on" : ""} onClick={() => setView("capture")}>Capture</button>
+          {admin && (
+            <button className={view === "admin" ? "on" : ""} onClick={() => setView("admin")}>Admin</button>
+          )}
           {settings && (
             <span className={"provbadge" + (settings.llm_provider === "ollama" ? "" : " cloud")}
               title={settings.llm_provider === "ollama" ? "Running on the local model" : "Using a cloud API"}>
               {settings.llm_provider === "ollama" ? "local" : "cloud"}: {settings.llm_model}
             </span>
           )}
-          <button className="themetoggle" title="Settings" onClick={() => setShowSettings(s => !s)}>⚙️</button>
+          <span className="provbadge" title={`Logged in as ${me.username} (${me.role})`}>
+            {me.author} · {me.role}
+          </span>
+          {admin && (
+            <button className="themetoggle" title="Settings" onClick={() => setShowSettings(s => !s)}>⚙️</button>
+          )}
           <button className="themetoggle" title="Switch theme"
             onClick={() => setTheme(t => (t === "light" ? "dark" : "light"))}>
             {theme === "light" ? "🌙" : "☀️"}
           </button>
+          <button className="themetoggle" title="Log out" onClick={logout}>Log out</button>
         </span>
       </div>
       <div className="wrap">
@@ -57,19 +108,256 @@ export default function App() {
         {showSettings && (
           <SettingsPanel onSaved={setSettings} onClose={() => setShowSettings(false)} />
         )}
-        {view === "dashboard" ? (
-          <Dashboard tick={dashTick} />
-        ) : (
+        {view === "dashboard" && <Dashboard tick={dashTick} me={me} />}
+        {view === "capture" && (
           <>
-            <AiUpdateForm tasks={tasks} onDone={refresh} />
-            <ProjectForm onDone={refresh} />
-            <TaskForm projects={projects} onDone={refresh} />
-            <UpdateForm tasks={tasks} onDone={refresh} />
+            <AiUpdateForm tasks={tasks} onDone={refresh} me={me} people={people} />
+            {isManagerUp(me) && <ProjectForm onDone={refresh} />}
+            {isManagerUp(me) && <TaskForm projects={projects} onDone={refresh} />}
+            <UpdateForm tasks={tasks} onDone={refresh} me={me} people={people} />
             <UpdatesTable updates={updates} tasks={tasks} />
           </>
         )}
+        {view === "admin" && admin && (
+          <AdminPanel me={me} people={people} onPeopleChanged={() => api.listPeople().then(setPeople).catch(() => {})} />
+        )}
       </div>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Login (auth sprint). The app is unusable until the backend confirms a session;
+// any later 401 lands back here via api.onUnauthorized.
+// ---------------------------------------------------------------------------
+export function LoginPage({ onLogin }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!username.trim() || !password) return;
+    setBusy(true); setErr("");
+    try {
+      onLogin(await api.login({ username: username.trim(), password }));
+    } catch (e2) {
+      setErr(e2.message || "Login failed.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="card" style={{ maxWidth: 380, margin: "60px auto" }} onSubmit={submit}>
+      <h2 style={{ marginTop: 0 }}>Log in</h2>
+      <label htmlFor="login-username">Username</label>
+      <input id="login-username" value={username} onChange={e => setUsername(e.target.value)}
+        autoFocus autoComplete="username" />
+      <label htmlFor="login-password">Password</label>
+      <input id="login-password" type="password" value={password} onChange={e => setPassword(e.target.value)}
+        autoComplete="current-password" />
+      <button type="submit" disabled={busy || !username.trim() || !password}>
+        {busy ? "Logging in…" : "Log in"}
+      </button>
+      {err && <p style={{ color: "var(--danger)", marginBottom: 0 }}>{err}</p>}
+      <p className="muted" style={{ marginBottom: 0 }}>No account? Ask an admin to create one.</p>
+    </form>
+  );
+}
+
+// Author control on the capture forms. Members always post as themselves (the
+// server enforces it); manager and admin can pick a roster name or type one.
+function AuthorField({ me, people, value, onChange }) {
+  if (!isManagerUp(me)) {
+    return (
+      <div><label>Author</label>
+        <input value={me?.author || ""} readOnly title="Updates are posted under your name" />
+      </div>
+    );
+  }
+  return (
+    <div><label>Author (blank = you)</label>
+      <input list="people-names" value={value} onChange={e => onChange(e.target.value)}
+        placeholder={me.author} />
+      <datalist id="people-names">
+        {people.map(p => <option key={p.id} value={p.name} />)}
+      </datalist>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Admin tab (auth sprint): manage login accounts and the org roster.
+// ---------------------------------------------------------------------------
+export function AdminPanel({ me, people, onPeopleChanged }) {
+  return (
+    <>
+      <UsersPanel me={me} people={people} />
+      <PeoplePanel people={people} onChanged={onPeopleChanged} />
+    </>
+  );
+}
+
+function UsersPanel({ me, people }) {
+  const [users, setUsers] = useState([]);
+  const [err, setErr] = useState("");
+  const [form, setForm] = useState({ username: "", password: "", role: "member", person_id: "" });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  async function refresh() {
+    try { setUsers(await api.listUsers()); setErr(""); }
+    catch (e) { setErr(e.message || "Could not load users."); }
+  }
+  useEffect(() => { refresh(); }, []);
+
+  const run = (fn) => async (...args) => {
+    try { await fn(...args); await refresh(); }
+    catch (e) { setErr(e.message || "Action failed."); }
+  };
+
+  const create = run(async () => {
+    await api.createUser({
+      username: form.username.trim(),
+      password: form.password,
+      role: form.role,
+      person_id: form.person_id ? Number(form.person_id) : null,
+    });
+    setForm({ username: "", password: "", role: "member", person_id: "" });
+  });
+  const setRole = run((u, role) => api.updateUser(u.id, { role }));
+  const setPerson = run((u, pid) => api.updateUser(u.id, pid ? { person_id: Number(pid) } : { clear_person: true }));
+  const toggleActive = run((u) => api.updateUser(u.id, { is_active: !u.is_active }));
+  const remove = run(async (u) => {
+    if (window.confirm(`Delete account "${u.username}"? This cannot be undone.`)) await api.deleteUser(u.id);
+  });
+  const resetPassword = run(async (u) => {
+    const pw = window.prompt(`New password for "${u.username}" (min 8 characters):`);
+    if (pw) await api.setUserPassword(u.id, { new_password: pw });
+  });
+
+  return (
+    <div className="card">
+      <h2 style={{ marginTop: 0 }}>User accounts</h2>
+      <table>
+        <thead><tr><th>Username</th><th>Role</th><th>Person</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          {users.map(u => (
+            <tr key={u.id}>
+              <td>{u.username}{u.id === me.id && <span className="muted"> (you)</span>}</td>
+              <td>
+                <select value={u.role} onChange={e => setRole(u, e.target.value)} style={{ width: "auto" }}>
+                  <option>member</option><option>manager</option><option>admin</option>
+                </select>
+              </td>
+              <td>
+                <select value={u.person_id ?? ""} onChange={e => setPerson(u, e.target.value)} style={{ width: "auto" }}
+                  title="Roster person this account posts as">
+                  <option value="">(none)</option>
+                  {people.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </td>
+              <td>{u.is_active ? <span className="tag done">active</span> : <span className="tag blocked">disabled</span>}</td>
+              <td>
+                <button className="link" onClick={() => resetPassword(u)}>set password</button>
+                <button className="link" onClick={() => toggleActive(u)}>{u.is_active ? "disable" : "enable"}</button>
+                <button className="link" style={{ color: "var(--danger)" }} onClick={() => remove(u)}>delete</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h2>Add account</h2>
+      <div className="row">
+        <div><label>Username</label><input value={form.username} onChange={e => set("username", e.target.value)} /></div>
+        <div><label>Password (min 8 chars)</label>
+          <input type="password" value={form.password} onChange={e => set("password", e.target.value)} /></div>
+        <div><label>Role</label>
+          <select value={form.role} onChange={e => set("role", e.target.value)}>
+            <option>member</option><option>manager</option><option>admin</option>
+          </select>
+        </div>
+        <div><label>Person (optional)</label>
+          <select value={form.person_id} onChange={e => set("person_id", e.target.value)}>
+            <option value="">(none)</option>
+            {people.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+      </div>
+      <button onClick={create} disabled={!form.username.trim() || form.password.length < 8}>Add account</button>
+      {err && <p style={{ color: "var(--danger)", marginBottom: 0 }}>{err}</p>}
+      <p className="muted" style={{ marginBottom: 0 }}>
+        Linking a person makes that account post updates under the roster name,
+        which feeds the team and person rollups.
+      </p>
+    </div>
+  );
+}
+
+function PeoplePanel({ people, onChanged }) {
+  const [err, setErr] = useState("");
+  const [form, setForm] = useState({ name: "", name_ja: "", team: "", department: "" });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const run = (fn) => async (...args) => {
+    try { await fn(...args); onChanged(); setErr(""); }
+    catch (e) { setErr(e.message || "Action failed."); }
+  };
+
+  const create = run(async () => {
+    await api.createPerson({
+      name: form.name.trim(),
+      name_ja: form.name_ja.trim() || null,
+      team: form.team.trim() || null,
+      department: form.department.trim() || null,
+    });
+    setForm({ name: "", name_ja: "", team: "", department: "" });
+  });
+  const edit = run(async (p) => {
+    const team = window.prompt(`Team for ${p.name}:`, p.team || "");
+    if (team === null) return;
+    const department = window.prompt(`Department for ${p.name}:`, p.department || "");
+    if (department === null) return;
+    await api.updatePerson(p.id, { name: p.name, name_ja: p.name_ja, team: team || null, department: department || null });
+  });
+  const remove = run(async (p) => {
+    if (window.confirm(`Remove "${p.name}" from the roster?`)) await api.deletePerson(p.id);
+  });
+
+  return (
+    <div className="card">
+      <h2 style={{ marginTop: 0 }}>People (org roster)</h2>
+      {people.length === 0 ? <p className="muted">No people yet. Names drive the team and person reports.</p> : (
+        <table>
+          <thead><tr><th>Name</th><th>Japanese name</th><th>Team</th><th>Department</th><th>Actions</th></tr></thead>
+          <tbody>
+            {people.map(p => (
+              <tr key={p.id}>
+                <td>{p.name}</td>
+                <td className="muted">{p.name_ja || "-"}</td>
+                <td>{p.team || "-"}</td>
+                <td className="muted">{p.department || "-"}</td>
+                <td>
+                  <button className="link" onClick={() => edit(p)}>edit</button>
+                  <button className="link" style={{ color: "var(--danger)" }} onClick={() => remove(p)}>delete</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <h2>Add person</h2>
+      <div className="row">
+        <div><label>Name</label><input value={form.name} onChange={e => set("name", e.target.value)} /></div>
+        <div><label>Japanese name</label><input value={form.name_ja} onChange={e => set("name_ja", e.target.value)} /></div>
+        <div><label>Team</label><input value={form.team} onChange={e => set("team", e.target.value)} /></div>
+        <div><label>Department</label><input value={form.department} onChange={e => set("department", e.target.value)} /></div>
+      </div>
+      <button onClick={create} disabled={!form.name.trim()}>Add person</button>
+      {err && <p style={{ color: "var(--danger)", marginBottom: 0 }}>{err}</p>}
+    </div>
   );
 }
 
@@ -236,7 +524,7 @@ export function SettingsPanel({ onSaved, onClose }) {
 const STATUS_SEG = ["not_started", "in_progress", "blocked", "done"];
 const STATUS_LABEL = { not_started: "Not started", in_progress: "In progress", blocked: "Blocked", done: "Done" };
 
-export function Dashboard({ tick }) {
+export function Dashboard({ tick, me }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
   const [config, setConfig] = useState(null);     // active ViewConfig, null = full view
@@ -375,7 +663,10 @@ export function Dashboard({ tick }) {
             {views.map(v => (
               <span key={v.id} className="viewchip">
                 <button className="vname" onClick={() => applySaved(v)}>{v.name}</button>
-                <button className="vx" onClick={() => removeView(v.id)} title="Delete">×</button>
+                {/* delete: the creator, or manager+ (shared/legacy views have no creator) */}
+                {(!me || isManagerUp(me) || v.created_by === me.id) && (
+                  <button className="vx" onClick={() => removeView(v.id)} title="Delete">×</button>
+                )}
               </span>
             ))}
           </div>
@@ -638,7 +929,7 @@ function TaskForm({ projects, onDone }) {
   );
 }
 
-function UpdateForm({ tasks, onDone }) {
+function UpdateForm({ tasks, onDone, me, people = [] }) {
   const [form, setForm] = useState({ task_id: "", author: "", language: "en", raw_text: "" });
   const [blocker, setBlocker] = useState({ description: "", severity: "medium" });
   const [nextStep, setNextStep] = useState({ description: "", owner: "" });
@@ -672,7 +963,7 @@ function UpdateForm({ tasks, onDone }) {
             {tasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
           </select>
         </div>
-        <div><label>Author</label><input value={form.author} onChange={e => set("author", e.target.value)} /></div>
+        <AuthorField me={me} people={people} value={form.author} onChange={v => set("author", v)} />
         <div><label>Language</label>
           <select value={form.language} onChange={e => set("language", e.target.value)}>
             <option value="en">English</option><option value="ja">Japanese</option>
@@ -704,7 +995,7 @@ function UpdateForm({ tasks, onDone }) {
 // confirmation blocks -> save through the existing POST /updates. Nothing is saved
 // until "Confirm & save".
 // ---------------------------------------------------------------------------
-function AiUpdateForm({ tasks, onDone }) {
+function AiUpdateForm({ tasks, onDone, me, people = [] }) {
   const [text, setText] = useState("");
   const [language, setLanguage] = useState("en");
   const [author, setAuthor] = useState("");
@@ -830,7 +1121,7 @@ function AiUpdateForm({ tasks, onDone }) {
             <option value="en">English</option><option value="ja">Japanese</option>
           </select>
         </div>
-        <div><label>Author</label><input value={author} onChange={e => setAuthor(e.target.value)} /></div>
+        <AuthorField me={me} people={people} value={author} onChange={setAuthor} />
       </div>
       <button onClick={extract} disabled={busy || !text.trim()}>
         {busy ? "Extracting..." : "Extract"}
