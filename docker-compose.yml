@@ -1,21 +1,62 @@
-# Brings up Postgres + backend together. Frontend runs separately with `npm run dev`
-# during week 1 for fast iteration (see README).
+# Full stack: frontend (nginx, port 8080) + backend (FastAPI) + Ollama, all local.
+#
+#   docker compose up --build
+#   docker compose exec ollama ollama pull qwen2.5:7b   # one-time, ~4.7 GB
+#   open http://localhost:8080
+#
+# SQLite on the app_data volume is the default database. To use Postgres instead:
+#   docker compose --profile postgres up --build
+# and set DATABASE_URL in .env to the postgres URL (see .env.example).
+# NVIDIA GPU for Ollama: add -f docker-compose.yml -f docker-compose.gpu.yml.
 services:
-  db:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: onestatus
-      POSTGRES_PASSWORD: onestatus
-      POSTGRES_DB: onestatus
-    ports: ["5432:5432"]
-    volumes: ["pgdata:/var/lib/postgresql/data"]
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      # The ollama image has no curl; the CLI itself answers once the server is up.
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
   backend:
     build: ./backend
+    env_file:
+      - path: .env
+        required: false
     environment:
-      DATABASE_URL: postgresql+psycopg2://onestatus:onestatus@db:5432/onestatus
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/onestatus.db}
+      OLLAMA_URL: http://ollama:11434
+      SEED_ON_START: ${SEED_ON_START:-1}
+    volumes:
+      - app_data:/data
+      - whisper_cache:/cache/hf
+    depends_on:
+      ollama:
+        condition: service_healthy
+    # Optional: expose the API on the host for curl/debugging.
     ports: ["8000:8000"]
-    depends_on: [db]
+
+  frontend:
+    build: ./frontend
+    # FRONTEND_PORT in .env moves the app when 8080 is taken on the host.
+    ports: ["${FRONTEND_PORT:-8080}:80"]
+    depends_on: [backend]
+
+  db:
+    image: postgres:16
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-onestatus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-onestatus}
+      POSTGRES_DB: ${POSTGRES_DB:-onestatus}
+    ports: ["${POSTGRES_PORT:-5432}:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
 
 volumes:
+  ollama_models:
+  app_data:
+  whisper_cache:
   pgdata:

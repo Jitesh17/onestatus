@@ -130,3 +130,15 @@ class SavedView(Base):
     name: Mapped[str] = mapped_column(String(120))
     config: Mapped[str] = mapped_column(Text)  # JSON-encoded ViewConfig
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=dt.datetime.utcnow)
+
+
+class AppSetting(Base):
+    """Single-row store for runtime settings chosen in the UI (id is always 1).
+
+    `data` holds the non-secret mutable settings as JSON; the LLM API key is
+    deliberately excluded (env-or-memory only). New table, so create_all covers
+    it and migrate.py needs no entry.
+    """
+    __tablename__ = "app_settings"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    data: Mapped[str] = mapped_column(Text, default="{}")

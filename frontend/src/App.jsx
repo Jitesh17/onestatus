@@ -12,6 +12,8 @@ export default function App() {
   const [view, setView] = useState("dashboard");
   const [dashTick, setDashTick] = useState(0); // bump to refetch the dashboard after a save
   const [theme, setTheme] = useState(() => localStorage.getItem("onestatus.theme") || "light");
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState(null); // backs the header provider badge
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -23,11 +25,12 @@ export default function App() {
       const [p, t, u] = await Promise.all([api.listProjects(), api.listTasks(), api.listUpdates()]);
       setProjects(p); setTasks(t); setUpdates(u); setError("");
     } catch (e) {
-      setError("Cannot reach the API. Is the backend running on port 8000?");
+      setError("Cannot reach the API. Is the backend running?");
     }
     setDashTick(x => x + 1);
   }
   useEffect(() => { refresh(); }, []);
+  useEffect(() => { api.getSettings().then(setSettings).catch(() => { /* badge simply hidden */ }); }, []);
 
   return (
     <>
@@ -36,6 +39,13 @@ export default function App() {
         <span className="tabs">
           <button className={view === "dashboard" ? "on" : ""} onClick={() => setView("dashboard")}>Dashboard</button>
           <button className={view === "capture" ? "on" : ""} onClick={() => setView("capture")}>Capture</button>
+          {settings && (
+            <span className={"provbadge" + (settings.llm_provider === "ollama" ? "" : " cloud")}
+              title={settings.llm_provider === "ollama" ? "Running on the local model" : "Using a cloud API"}>
+              {settings.llm_provider === "ollama" ? "local" : "cloud"}: {settings.llm_model}
+            </span>
+          )}
+          <button className="themetoggle" title="Settings" onClick={() => setShowSettings(s => !s)}>⚙️</button>
           <button className="themetoggle" title="Switch theme"
             onClick={() => setTheme(t => (t === "light" ? "dark" : "light"))}>
             {theme === "light" ? "🌙" : "☀️"}
@@ -44,6 +54,9 @@ export default function App() {
       </div>
       <div className="wrap">
         {error && <div className="card" style={{ borderColor: "var(--danger)", color: "var(--danger)" }}>{error}</div>}
+        {showSettings && (
+          <SettingsPanel onSaved={setSettings} onClose={() => setShowSettings(false)} />
+        )}
         {view === "dashboard" ? (
           <Dashboard tick={dashTick} />
         ) : (
@@ -57,6 +70,163 @@ export default function App() {
         )}
       </div>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Settings panel: choose the LLM provider/model and the Whisper model live.
+// Reads GET /settings and /settings/models; PUT sends only the changed fields.
+// The API key is write-only: typed here, sent once, never echoed back.
+// ---------------------------------------------------------------------------
+const PROVIDER_LABEL = {
+  ollama: "Local (Ollama)",
+  openai: "OpenAI compatible API",
+  anthropic: "Anthropic API",
+};
+
+export function SettingsPanel({ onSaved, onClose }) {
+  const [form, setForm] = useState(null);        // editable copy of GET /settings
+  const [dirty, setDirty] = useState({});        // only these fields are sent on save
+  const [apiKey, setApiKey] = useState("");      // write-only; empty = leave unchanged
+  const [models, setModels] = useState({ ollama_models: [], whisper_sizes: [], warning: null });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  async function loadModels() {
+    try { setModels(await api.listModels()); } catch { /* panel still usable */ }
+  }
+  useEffect(() => {
+    api.getSettings().then(setForm).catch(e => setErr(e.message || "Could not load settings."));
+    loadModels();
+  }, []);
+
+  const set = (k, v) => {
+    setForm(f => ({ ...f, [k]: v }));
+    setDirty(d => ({ ...d, [k]: v }));
+    setSaved(false);
+  };
+
+  async function save() {
+    const payload = { ...dirty };
+    if (apiKey.trim()) payload.llm_api_key = apiKey.trim();
+    if (Object.keys(payload).length === 0) { onClose(); return; }
+    setBusy(true); setErr("");
+    try {
+      const s = await api.putSettings(payload);
+      setForm(s); setDirty({}); setApiKey(""); setSaved(true);
+      onSaved(s);
+    } catch (e) {
+      setErr(e.message || "Could not save settings.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!form) return <div className="card"><p className="muted">{err || "Loading settings…"}</p></div>;
+
+  const cloud = form.llm_provider !== "ollama";
+  // The configured model may not be in the installed list (e.g. Ollama down);
+  // keep it selectable so the dropdown never silently changes the value.
+  const ollamaOptions = models.ollama_models.includes(form.llm_model) || cloud
+    ? models.ollama_models
+    : [form.llm_model, ...models.ollama_models];
+
+  return (
+    <div className="card" style={{ borderColor: "var(--accent)" }}>
+      <div className="row" style={{ alignItems: "center" }}>
+        <h2 style={{ margin: 0 }}>Settings</h2>
+        <span style={{ flex: 1 }} />
+        <button className="link" onClick={onClose}>close</button>
+      </div>
+
+      <label>LLM provider</label>
+      <div className="row" role="radiogroup">
+        {Object.entries(PROVIDER_LABEL).map(([value, label]) => (
+          <label key={value} style={{ fontWeight: 400, display: "flex", alignItems: "center", gap: 6, margin: 0 }}>
+            <input type="radio" name="llm_provider" value={value} style={{ width: "auto" }}
+              checked={form.llm_provider === value} onChange={() => set("llm_provider", value)} />
+            {label}
+          </label>
+        ))}
+      </div>
+
+      {cloud ? (
+        <>
+          <div className="cloudwarn">
+            Cloud mode: update text is sent to an external API for extraction.
+            Audio transcription stays on this machine either way.
+          </div>
+          <div className="row">
+            <div><label>Model</label>
+              <input value={form.llm_model} onChange={e => set("llm_model", e.target.value)}
+                placeholder={form.llm_provider === "openai" ? "gpt-4o-mini" : "claude-haiku-4-5-20251001"} />
+            </div>
+            <div><label>API key {form.api_key_set ? "(set)" : "(not set)"}</label>
+              <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
+                placeholder={form.api_key_set ? "leave blank to keep the current key" : "paste the key"} />
+            </div>
+          </div>
+          {form.llm_provider === "openai" && (
+            <div><label>Base URL (optional, for vLLM or another compatible server)</label>
+              <input value={form.llm_base_url} onChange={e => set("llm_base_url", e.target.value)}
+                placeholder="https://api.openai.com" />
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="row">
+          <div><label>Model</label>
+            <select value={form.llm_model} onChange={e => set("llm_model", e.target.value)}>
+              {ollamaOptions.map(m => <option key={m}>{m}</option>)}
+            </select>
+          </div>
+          <div><label>Ollama URL</label>
+            <input value={form.ollama_url} onChange={e => set("ollama_url", e.target.value)} />
+          </div>
+          <div style={{ flex: "0 0 auto", alignSelf: "flex-end" }}>
+            <button style={{ marginTop: 0 }} onClick={loadModels} title="Re-list installed models">Refresh</button>
+          </div>
+        </div>
+      )}
+      {!cloud && models.warning && <p className="muted" style={{ color: "var(--danger)" }}>{models.warning}</p>}
+
+      <label style={{ marginTop: 14 }}>Speech to text (Whisper, always local)</label>
+      <div className="row">
+        <div><label>Model size</label>
+          <select value={form.whisper_model} onChange={e => set("whisper_model", e.target.value)}>
+            {(models.whisper_sizes.length ? models.whisper_sizes : [form.whisper_model]).map(s => <option key={s}>{s}</option>)}
+          </select>
+        </div>
+        <div><label>Device</label>
+          <select value={form.whisper_device} onChange={e => set("whisper_device", e.target.value)}>
+            <option value="cpu">cpu</option>
+            <option value="cuda">cuda (NVIDIA GPU)</option>
+          </select>
+        </div>
+      </div>
+      <p className="muted">Changing the size downloads that model on the next transcription (up to ~3 GB for large).</p>
+
+      <details style={{ marginTop: 8 }}>
+        <summary className="muted" style={{ cursor: "pointer" }}>Advanced</summary>
+        <div className="row">
+          <div><label>Temperature (0 = deterministic)</label>
+            <input type="number" min="0" max="2" step="0.1" value={form.llm_temperature}
+              onChange={e => set("llm_temperature", Number(e.target.value))} />
+          </div>
+          <div><label>LLM timeout (seconds)</label>
+            <input type="number" min="1" max="600" value={form.llm_timeout}
+              onChange={e => set("llm_timeout", Number(e.target.value))} />
+          </div>
+        </div>
+      </details>
+
+      <div className="row" style={{ alignItems: "center" }}>
+        <button onClick={save} disabled={busy}>{busy ? "Saving…" : "Save settings"}</button>
+        {saved && <span className="tag done" style={{ marginTop: 12 }}>Saved. Applies to the next extraction.</span>}
+      </div>
+      {err && <p style={{ color: "var(--danger)", marginBottom: 0 }}>{err}</p>}
+    </div>
   );
 }
 

@@ -31,9 +31,13 @@ assert "onestatus.db" not in str(engine.url), f"tests bound to dev DB: {engine.u
 @pytest.fixture(autouse=True)
 def fresh_db():
     """Empty schema per test. drop_all + create_all is milliseconds on temp SQLite,
-    and unlike transaction rollback it survives the commits crud does internally."""
+    and unlike transaction rollback it survives the commits crud does internally.
+    The settings singleton is mutable at runtime (PUT /settings), so it is reset
+    to env defaults too; without this a provider switch leaks between tests."""
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    from app.config import settings as app_settings
+    app_settings.reload_from_env()
     yield
 
 

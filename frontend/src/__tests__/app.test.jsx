@@ -19,6 +19,9 @@ vi.mock("../api.js", () => ({
     listViews: vi.fn(),
     saveView: vi.fn(),
     deleteView: vi.fn(),
+    getSettings: vi.fn(),
+    putSettings: vi.fn(),
+    listModels: vi.fn(),
   },
 }));
 
@@ -42,6 +45,13 @@ const EMPTY_DASH = {
   trends: { progress: [], blockers: [] },
 };
 
+const DEFAULT_SETTINGS = {
+  llm_provider: "ollama", ollama_url: "http://localhost:11434", llm_model: "qwen2.5:7b",
+  llm_base_url: "", llm_temperature: 0, llm_timeout: 120, api_key_set: false,
+  whisper_model: "medium", whisper_device: "cpu", whisper_compute: "int8",
+  whisper_beam: 5, whisper_vad: true,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
@@ -51,6 +61,8 @@ beforeEach(() => {
   api.dashboard.mockResolvedValue(EMPTY_DASH);
   api.listViews.mockResolvedValue([]);
   api.listPresets.mockResolvedValue({ teams: [], presets: [] });
+  api.getSettings.mockResolvedValue(DEFAULT_SETTINGS);
+  api.listModels.mockResolvedValue({ ollama_models: ["qwen2.5:7b"], whisper_sizes: ["medium"], warning: null });
 });
 
 describe("App", () => {

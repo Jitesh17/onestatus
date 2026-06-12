@@ -4,6 +4,9 @@ These mirror the ORM models but keep the API contract separate from storage,
 so we can change one without breaking the other.
 """
 import datetime as dt
+import os
+from typing import Literal
+
 from pydantic import BaseModel, Field, ConfigDict
 from .models import Status, Severity
 
@@ -71,7 +74,8 @@ class NextStepIn(BaseModel):
 
 # Cap on free-text bodies that reach storage or the local LLM. Real updates are a few
 # sentences; this only stops megabyte-scale payloads, not anything a person types.
-MAX_TEXT_LEN = 10_000
+# Env-overridable; binds into the Field validators at import, so boot-time only.
+MAX_TEXT_LEN = int(os.getenv("MAX_TEXT_LEN", "10000"))
 
 
 # ---------- Update ----------
@@ -342,3 +346,46 @@ class SavedViewOut(BaseModel):
     name: str
     config: ViewConfig
     created_at: dt.datetime
+
+
+# ---------- Runtime settings (provider/model configuration) ----------
+class SettingsOut(BaseModel):
+    """Effective runtime settings. The API key itself is never returned;
+    api_key_set tells the UI whether one is loaded."""
+    llm_provider: str
+    ollama_url: str
+    llm_model: str
+    llm_base_url: str
+    llm_temperature: float
+    llm_timeout: int
+    api_key_set: bool
+    whisper_model: str
+    whisper_device: str
+    whisper_compute: str
+    whisper_beam: int
+    whisper_vad: bool
+
+
+class SettingsUpdate(BaseModel):
+    """Partial update; only the fields present are changed. Literal types make
+    an invalid provider or device a 422 before anything is applied."""
+    llm_provider: Literal["ollama", "openai", "anthropic"] | None = None
+    ollama_url: str | None = None
+    llm_model: str | None = None
+    llm_api_key: str | None = None      # write-only; never echoed back
+    llm_base_url: str | None = None
+    llm_temperature: float | None = Field(default=None, ge=0, le=2)
+    llm_timeout: int | None = Field(default=None, ge=1, le=600)
+    whisper_model: Literal["tiny", "base", "small", "medium", "large-v2", "large-v3"] | None = None
+    whisper_device: Literal["cpu", "cuda"] | None = None
+    whisper_compute: str | None = None
+    whisper_beam: int | None = Field(default=None, ge=1, le=10)
+    whisper_vad: bool | None = None
+
+
+class ModelsOut(BaseModel):
+    """What the settings panel can offer: installed Ollama models plus the
+    fixed whisper size list. `warning` is set when Ollama is unreachable."""
+    ollama_models: list[str] = []
+    whisper_sizes: list[str] = []
+    warning: str | None = None

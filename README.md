@@ -2,11 +2,13 @@
 
 Voice-first bilingual project status platform, built for GearShift 2026.
 
-Engineers speak or type status updates in English, Japanese, or a mix. A local language
-model turns each update into a structured record (status, progress, blockers, risks, next
+Engineers speak or type status updates in English, Japanese, or a mix. A language model
+turns each update into a structured record (status, progress, blockers, risks, next
 steps), a human confirms it on a review screen, and managers get a live dashboard they can
-reshape with plain-language requests. Everything runs on one laptop: speech-to-text is
-faster-whisper, extraction is qwen2.5:7b via Ollama, and nothing leaves the machine.
+reshape with plain-language requests. Speech-to-text is always local (faster-whisper).
+Extraction runs on a local model by default (qwen2.5:7b via Ollama, nothing leaves the
+machine) or, switchable live from the settings panel, through a cloud API key when speed
+matters more than privacy. The trade-offs are laid out in [docs/MODES.md](docs/MODES.md).
 Extraction accuracy is 97% average per-field (EN 97%, JA 98%) on an internal 22-example
 test set, so treat it as directional rather than a guarantee.
 
@@ -22,6 +24,9 @@ test set, so treat it as directional rather than a guarantee.
   burn-down) built from per-update history
 - Natural-language dashboard control: "only blocked tasks in BRAVIA", "show the last 2 weeks",
   "top 3 blockers by severity", or the same in Japanese. Saved views recall a layout in one click
+- Settings panel (gear icon): switch the LLM provider (local Ollama, OpenAI-compatible,
+  Anthropic), pick any installed Ollama model, change the Whisper size and device, all live
+  with no restart. A header badge always shows whether extraction is local or cloud
 - Light and dark theme, remembered across sessions
 
 ## Stack
@@ -29,7 +34,30 @@ test set, so treat it as directional rather than a guarantee.
 React (Vite) · FastAPI · SQLAlchemy · SQLite (Postgres optional) · Ollama qwen2.5:7b ·
 faster-whisper medium
 
-## Run it locally
+## Run it
+
+Three ways, same app:
+
+| Mode | Command | When |
+|---|---|---|
+| Docker compose | `docker compose up --build` | office machine, demos, anything that should just work |
+| Dev loop (Mac or Linux) | venv + `npm run dev` (below) | day-to-day development |
+| Cloud API extraction | either of the above + a key in the settings panel | no GPU, or demo speed on a small budget |
+
+### Docker compose (recommended for deployment)
+
+```bash
+docker compose up --build
+docker compose exec ollama ollama pull qwen2.5:7b
+```
+
+The first command builds and starts frontend (http://localhost:8080), backend, and a
+bundled Ollama; the second is a one-time model download (about 4.7 GB, kept on a volume).
+Demo data seeds itself on first boot. Database, Whisper models, and chosen settings all
+live on named volumes and survive rebuilds. Ubuntu setup, NVIDIA GPU passthrough, and the
+Postgres option are covered in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+### Dev loop
 
 Four pieces: a Python 3.11 venv, the Ollama model, the backend, the frontend.
 
@@ -74,6 +102,14 @@ Open http://localhost:5173. The first voice request downloads the faster-whisper
 later requests take a few seconds. A scripted walkthrough lives in
 [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
 
+### Cloud API extraction
+
+Open the settings panel (gear icon), pick "OpenAI compatible API" or "Anthropic API",
+paste a model name and key, save. The header badge flips from `local` to `cloud` and the
+next extraction uses the API; switch back the same way, no restart. Keys are held in
+memory only: never stored in the database, never echoed back by the API. The same knobs
+exist as env vars for headless setups; see [.env.example](.env.example).
+
 ## API endpoints
 
 | Method | Path | Purpose |
@@ -83,7 +119,9 @@ later requests take a few seconds. A scripted walkthrough lives in
 | GET / POST | /tasks | list / create tasks (GET supports ?project_id=) |
 | GET / POST | /updates | list / create status updates with nested items |
 | POST | /transcribe | audio (multipart) to transcript via local faster-whisper; persists nothing |
-| POST | /extract | free text to structured draft via local LLM; persists nothing |
+| POST | /extract | free text to structured draft via the configured LLM; persists nothing |
+| GET / PUT | /settings | read / change provider, models, and parameters live |
+| GET | /settings/models | installed Ollama models + Whisper size list |
 | GET | /dashboard | manager KPIs, lists, and trend series aggregated from the data |
 | POST | /dashboard/configure | natural-language request to view-config + filtered dashboard |
 | POST | /dashboard/apply | apply an explicit or saved view-config |
@@ -112,21 +150,29 @@ and ran about 40% faster on half the memory. Rationale in
 backend/
   app/
     main.py             FastAPI app, CORS, table creation + column migration
+    config.py           runtime settings singleton (every model and parameter)
     database.py         engine + session (SQLite default, Postgres via DATABASE_URL)
     migrate.py          additive column migration (create_all never ALTERs)
     models.py           SQLAlchemy ORM models
     schemas.py          Pydantic request/response shapes
     crud.py             database logic, dashboard aggregation, trend series
-    extractor.py        local LLM extraction (Ollama)
+    llm.py              provider dispatch: Ollama / OpenAI-compatible / Anthropic
+    extractor.py        update-text extraction prompt + draft normalization
     view_interpreter.py natural-language request to view-config
+    transcriber.py      faster-whisper wrapper, live-reloadable
     seed.py             minimal demo data
     seed_demo.py        richer demo data + 3 weeks of backdated history
-    routers/            projects, tasks, updates, extract, transcribe, dashboard, views
-eval/                   labeled dataset + scoring harness
+    routers/            projects, tasks, updates, extract, transcribe, dashboard, views, settings
+  Dockerfile            python:3.11-slim image, non-root, healthcheck
+eval/                   labeled dataset + scoring harness (local vs cloud comparable)
 frontend/
   src/
-    App.jsx             dashboard, capture, review screen, NL command bar
+    App.jsx             dashboard, capture, review screen, NL command bar, settings panel
     api.js              API client
     main.jsx            entry + theme variables and styles
-docker-compose.yml      optional Postgres path
+  Dockerfile            node build stage into nginx
+  nginx.conf            SPA serving + /api reverse proxy
+docker-compose.yml      full stack: frontend + backend + Ollama (+ Postgres profile)
+docker-compose.gpu.yml  NVIDIA passthrough overlay for Ollama
+.env.example            every knob with its default
 ```

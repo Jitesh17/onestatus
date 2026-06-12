@@ -112,6 +112,12 @@ style.textContent = `
   .viewchip .vname { background: var(--chip-bg); color: var(--accent); border: 0; margin: 0; padding: 4px 10px; font-size: 13px; border-radius: 0; }
   .viewchip .vx { background: var(--card); color: var(--danger); border: 0; margin: 0; padding: 4px 9px; font-size: 14px; border-radius: 0; }
 
+  /* runtime settings: header provider badge + cloud-mode warning */
+  .provbadge { font-size: 11px; padding: 3px 9px; border-radius: 10px; background: rgba(255,255,255,.12); color: #cdd6ea; }
+  .provbadge.cloud { background: #ffc000; color: #1f3864; font-weight: 700; }
+  .cloudwarn { border: 1px solid #e0a400; background: #fff7e0; color: #7a5b16; border-radius: 6px; padding: 8px 12px; font-size: 13px; margin-top: 10px; }
+  [data-theme="dark"] .cloudwarn { background: #3a2f18; color: #ffc000; border-color: #7a5b16; }
+
   /* small screens: stack the KPI grid and loosen the header */
   @media (max-width: 768px) {
     .kpis { grid-template-columns: repeat(2, 1fr); }

@@ -1,25 +1,22 @@
-"""Local-LLM extraction: free-form update text -> structured draft.
+"""LLM extraction: free-form update text -> structured draft.
 
-Week 2. Calls a local Ollama model in JSON-constrained mode and grounds it in a
-"world" (the known projects, tasks, and people) so it matches names instead of
-inventing them. The output dict mirrors the eval `expected` schema exactly, so the
-same function powers both the live `/extract` endpoint and `eval/run_eval.py`.
+Week 2. Calls the configured LLM (local Ollama by default, cloud providers via
+llm.py) in JSON mode and grounds it in a "world" (the known projects, tasks, and
+people) so it matches names instead of inventing them. The output dict mirrors
+the eval `expected` schema exactly, so the same function powers both the live
+`/extract` endpoint and `eval/run_eval.py`.
 
 The model proposes; a human confirms in the UI before anything is saved. Nothing
 here writes to the database.
 
-Env:
-  OLLAMA_URL    base URL of the Ollama server (default http://localhost:11434)
-  OLLAMA_MODEL  default model name when the caller does not pass one (default qwen2.5:7b)
+Provider, model, URL, temperature, and timeout all live in config.settings
+(env defaults, runtime-switchable through the /settings API).
 """
 import difflib
-import json
-import os
-import urllib.error
-import urllib.request
 
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+# The exception lives in llm.py (shared by all providers); re-exported here
+# because the routers and view_interpreter import it from this module.
+from .llm import ExtractorError, llm_json  # noqa: F401
 
 # The shape we ask the model to fill. Mirrors eval `expected`. Kept as a literal
 # in the prompt so the model sees the exact keys and the "leave empty" contract.
@@ -58,10 +55,6 @@ def _named_in_text(name, text):
     if name.lower() in text.lower():
         return True
     return any(a in text for a in NAME_ALIASES.get(name, []))
-
-
-class ExtractorError(RuntimeError):
-    """Raised when the local model is unreachable or returns unusable output."""
 
 
 def fuzzy_match(value, candidates, cutoff=0.8):
@@ -127,42 +120,14 @@ Return ONLY the JSON object, no prose."""
 
 
 def ollama_json(system_prompt, user_text, model=None, base_url=None):
-    """Call the local Ollama chat API in JSON mode and return the parsed dict.
+    """Send a system+user prompt to the configured LLM provider, return parsed JSON.
 
-    Shared by the extractor and the week-6 view interpreter. Raises ExtractorError on a
-    connection failure or unparseable output so callers can surface a clean 503.
+    Historically this was the raw Ollama call; it now delegates to llm.llm_json,
+    which dispatches on config.settings.llm_provider (ollama/openai/anthropic).
+    The name is kept because it is the stable seam the test suite patches and
+    the view interpreter imports. Raises ExtractorError so callers 503 cleanly.
     """
-    base_url = base_url or OLLAMA_URL
-    payload = {
-        "model": model or DEFAULT_MODEL,
-        "format": "json",
-        "stream": False,
-        "options": {"temperature": 0},
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_text},
-        ],
-    }
-    req = urllib.request.Request(
-        f"{base_url}/api/chat",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.URLError as e:
-        raise ExtractorError(
-            f"Cannot reach Ollama at {base_url} ({e}). Is `ollama serve` running and the model pulled?"
-        ) from e
-    content = body.get("message", {}).get("content", "")
-    if not content:
-        raise ExtractorError("Ollama returned an empty response.")
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError as e:
-        raise ExtractorError(f"Model did not return valid JSON: {content[:200]}") from e
+    return llm_json(system_prompt, user_text, model=model, base_url=base_url)
 
 
 def _ollama_chat(text, world, model, base_url):
@@ -255,5 +220,7 @@ def extract(text, world, model=None, language="en"):
     """
     if not text or not text.strip():
         return dict(EMPTY_DRAFT)
-    raw = _ollama_chat(text, world, model or DEFAULT_MODEL, OLLAMA_URL)
+    # model=None lets llm_json resolve the configured default at call time, so a
+    # live model/provider switch in the settings panel applies without a restart.
+    raw = _ollama_chat(text, world, model, None)
     return _coerce(raw, world, text=text)

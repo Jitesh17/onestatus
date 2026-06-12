@@ -4,6 +4,8 @@ Local speech-to-text via faster-whisper. Returns the transcript so the frontend 
 drop it into the confirmation editor and run the existing /extract -> /updates flow.
 Persists nothing.
 """
+import os
+
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from .. import schemas
@@ -13,7 +15,8 @@ router = APIRouter(prefix="/transcribe", tags=["transcribe"])
 
 # Upload cap: a minute of browser MediaRecorder audio is well under 1 MB, so 25 MB
 # leaves generous headroom while keeping an oversized body out of memory-heavy decode.
-MAX_AUDIO_BYTES = 25 * 1024 * 1024
+# Env-overridable for deployments behind a proxy with its own limit.
+MAX_AUDIO_BYTES = int(os.getenv("MAX_AUDIO_BYTES", str(25 * 1024 * 1024)))
 
 
 @router.post("", response_model=schemas.TranscriptOut)

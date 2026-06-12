@@ -10,6 +10,11 @@ Usage:
     python eval/run_eval.py --runs 3                  # average 3 runs/example (smooths noise)
     python eval/run_eval.py --runs 3 --errors         # also list every field that scored < 1.0
     python eval/run_eval.py --placeholder             # stub, no model needed
+
+Provider passthrough (compare local vs cloud as two invocations):
+    python eval/run_eval.py --provider openai --model gpt-4o-mini --api-key sk-...
+    python eval/run_eval.py --provider openai --base-url http://gpu-box:8000 --model ...
+    python eval/run_eval.py --provider anthropic --model claude-haiku-4-5-20251001 --api-key sk-ant-...
 """
 import argparse, json, os, sys, time, difflib
 
@@ -119,11 +124,26 @@ def _fmt_field(pred, exp, f):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="qwen2.5:7b", help="local model name for the real extractor")
+    ap.add_argument("--model", default="qwen2.5:7b", help="model name for the chosen provider")
     ap.add_argument("--runs", type=int, default=1, help="extractions per example; per-field scores are averaged (smooths temp-0 noise)")
     ap.add_argument("--errors", action="store_true", help="after scoring, list every example/field that scored < 1.0 (uses the last run)")
     ap.add_argument("--placeholder", action="store_true", help="use the empty-returning stub (no model needed)")
+    ap.add_argument("--provider", choices=["ollama", "openai", "anthropic"], default=None,
+                    help="LLM provider (default: the LLM_PROVIDER env or ollama)")
+    ap.add_argument("--base-url", default=None, help="openai-compatible base URL (vLLM, proxies)")
+    ap.add_argument("--api-key", default=None, help="cloud provider API key (or set LLM_API_KEY)")
+    ap.add_argument("--temperature", type=float, default=None, help="sampling temperature (default 0)")
     args = ap.parse_args()
+
+    # Point the shared settings singleton at the requested provider before any
+    # extraction; extractor -> llm_json reads these at call time.
+    overrides = {k: v for k, v in {
+        "llm_provider": args.provider, "llm_base_url": args.base_url,
+        "llm_api_key": args.api_key, "llm_temperature": args.temperature,
+    }.items() if v is not None}
+    if overrides and not args.placeholder:
+        from app.config import settings
+        settings.apply_overrides(overrides)
 
     world, rows = load_dataset()
     totals = {f: [] for f in FIELDS}                                   # per-example mean scores
@@ -132,7 +152,8 @@ def main():
     failures = []                                                     # (id, lang, [field-strings]) from last run
 
     extractor = placeholder_extract if args.placeholder else real_extract
-    label = "PLACEHOLDER (returns empties)" if args.placeholder else args.model
+    provider = args.provider or os.getenv("LLM_PROVIDER", "ollama")
+    label = "PLACEHOLDER (returns empties)" if args.placeholder else f"{args.model} [{provider}]"
     started = time.time()
 
     for i, ex in enumerate(rows, 1):
@@ -188,7 +209,7 @@ def main():
             for m in miss:
                 print(f"  {m}")
         if not failures:
-            print("  none — every field scored 1.0 on the last run.")
+            print("  none: every field scored 1.0 on the last run.")
 
 
 if __name__ == "__main__":
