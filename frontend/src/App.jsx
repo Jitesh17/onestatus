@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
+import DocsPage from "./Docs.jsx";
 
 const STATUS = ["not_started", "in_progress", "blocked", "done"];
 const SEVERITY = ["low", "medium", "high"];
@@ -81,6 +82,7 @@ export default function App() {
         <span className="tabs">
           <button className={view === "dashboard" ? "on" : ""} onClick={() => setView("dashboard")}>Dashboard</button>
           <button className={view === "capture" ? "on" : ""} onClick={() => setView("capture")}>Capture</button>
+          <button className={view === "docs" ? "on" : ""} onClick={() => setView("docs")}>Docs</button>
           {admin && (
             <button className={view === "admin" ? "on" : ""} onClick={() => setView("admin")}>Admin</button>
           )}
@@ -118,6 +120,7 @@ export default function App() {
             <UpdatesTable updates={updates} tasks={tasks} />
           </>
         )}
+        {view === "docs" && <DocsPage />}
         {view === "admin" && admin && (
           <AdminPanel me={me} people={people} onPeopleChanged={() => api.listPeople().then(setPeople).catch(() => {})} />
         )}
