@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 import DocsPage from "./Docs.jsx";
+import { useLang } from "./i18n.js";
 
 const STATUS = ["not_started", "in_progress", "blocked", "done"];
 const SEVERITY = ["low", "medium", "high"];
@@ -8,6 +9,7 @@ const ROLE_ORDER = { member: 0, manager: 1, admin: 2 };
 const isManagerUp = (me) => !!me && ROLE_ORDER[me.role] >= ROLE_ORDER.manager;
 
 export default function App() {
+  const { lang, t, setLang } = useLang();
   const [me, setMe] = useState(undefined); // undefined = checking, null = logged out
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -37,7 +39,7 @@ export default function App() {
       const [p, t, u] = await Promise.all([api.listProjects(), api.listTasks(), api.listUpdates()]);
       setProjects(p); setTasks(t); setUpdates(u); setError("");
     } catch (e) {
-      setError("Cannot reach the API. Is the backend running?");
+      setError(t("error.cannotReachApi"));
     }
     setDashTick(x => x + 1);
   }
@@ -55,13 +57,21 @@ export default function App() {
 
   if (me === undefined) return null; // checking the session; avoid a login flash
 
+  const langToggle = (
+    <button className="themetoggle" title={t("nav.switchLang")}
+      onClick={() => setLang(l => (l === "en" ? "ja" : "en"))}>
+      {lang === "en" ? "日本語" : "English"}
+    </button>
+  );
+
   if (me === null) {
     return (
       <>
         <div className="bar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span><b>OneStatus</b> &nbsp;·&nbsp; Voice-first bilingual status</span>
+          <span><b>OneStatus</b> &nbsp;·&nbsp; {t("header.tagline")}</span>
           <span className="tabs">
-            <button className="themetoggle" title="Switch theme"
+            {langToggle}
+            <button className="themetoggle" title={t("nav.switchTheme")}
               onClick={() => setTheme(t => (t === "light" ? "dark" : "light"))}>
               {theme === "light" ? "🌙" : "☀️"}
             </button>
@@ -78,31 +88,32 @@ export default function App() {
   return (
     <>
       <div className="bar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span><b>OneStatus</b> &nbsp;·&nbsp; Voice-first bilingual status</span>
+        <span><b>OneStatus</b> &nbsp;·&nbsp; {t("header.tagline")}</span>
         <span className="tabs">
-          <button className={view === "dashboard" ? "on" : ""} onClick={() => setView("dashboard")}>Dashboard</button>
-          <button className={view === "capture" ? "on" : ""} onClick={() => setView("capture")}>Capture</button>
-          <button className={view === "docs" ? "on" : ""} onClick={() => setView("docs")}>Docs</button>
+          <button className={view === "dashboard" ? "on" : ""} onClick={() => setView("dashboard")}>{t("nav.dashboard")}</button>
+          <button className={view === "capture" ? "on" : ""} onClick={() => setView("capture")}>{t("nav.capture")}</button>
+          <button className={view === "docs" ? "on" : ""} onClick={() => setView("docs")}>{t("nav.docs")}</button>
           {admin && (
-            <button className={view === "admin" ? "on" : ""} onClick={() => setView("admin")}>Admin</button>
+            <button className={view === "admin" ? "on" : ""} onClick={() => setView("admin")}>{t("nav.admin")}</button>
           )}
           {settings && (
             <span className={"provbadge" + (settings.llm_provider === "ollama" ? "" : " cloud")}
-              title={settings.llm_provider === "ollama" ? "Running on the local model" : "Using a cloud API"}>
-              {settings.llm_provider === "ollama" ? "local" : "cloud"}: {settings.llm_model}
+              title={settings.llm_provider === "ollama" ? t("nav.providerTitleLocal") : t("nav.providerTitleCloud")}>
+              {settings.llm_provider === "ollama" ? t("nav.local") : t("nav.cloud")}: {settings.llm_model}
             </span>
           )}
-          <span className="provbadge" title={`Logged in as ${me.username} (${me.role})`}>
-            {me.author} · {me.role}
+          <span className="provbadge" title={t("nav.loggedInAs", { username: me.username, role: t(`role.${me.role}`) })}>
+            {me.author} · {t(`role.${me.role}`)}
           </span>
           {admin && (
-            <button className="themetoggle" title="Settings" onClick={() => setShowSettings(s => !s)}>⚙️</button>
+            <button className="themetoggle" title={t("nav.settingsTitle")} onClick={() => setShowSettings(s => !s)}>⚙️</button>
           )}
-          <button className="themetoggle" title="Switch theme"
+          {langToggle}
+          <button className="themetoggle" title={t("nav.switchTheme")}
             onClick={() => setTheme(t => (t === "light" ? "dark" : "light"))}>
             {theme === "light" ? "🌙" : "☀️"}
           </button>
-          <button className="themetoggle" title="Log out" onClick={logout}>Log out</button>
+          <button className="themetoggle" title={t("nav.logout")} onClick={logout}>{t("nav.logout")}</button>
         </span>
       </div>
       <div className="wrap">
@@ -134,6 +145,7 @@ export default function App() {
 // any later 401 lands back here via api.onUnauthorized.
 // ---------------------------------------------------------------------------
 export function LoginPage({ onLogin }) {
+  const { t } = useLang();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -146,25 +158,25 @@ export function LoginPage({ onLogin }) {
     try {
       onLogin(await api.login({ username: username.trim(), password }));
     } catch (e2) {
-      setErr(e2.message || "Login failed.");
+      setErr(e2.message || t("login.failed"));
       setBusy(false);
     }
   }
 
   return (
     <form className="card" style={{ maxWidth: 380, margin: "60px auto" }} onSubmit={submit}>
-      <h2 style={{ marginTop: 0 }}>Log in</h2>
-      <label htmlFor="login-username">Username</label>
+      <h2 style={{ marginTop: 0 }}>{t("login.title")}</h2>
+      <label htmlFor="login-username">{t("login.username")}</label>
       <input id="login-username" value={username} onChange={e => setUsername(e.target.value)}
         autoFocus autoComplete="username" />
-      <label htmlFor="login-password">Password</label>
+      <label htmlFor="login-password">{t("login.password")}</label>
       <input id="login-password" type="password" value={password} onChange={e => setPassword(e.target.value)}
         autoComplete="current-password" />
       <button type="submit" disabled={busy || !username.trim() || !password}>
-        {busy ? "Logging in…" : "Log in"}
+        {busy ? t("login.buttonBusy") : t("login.button")}
       </button>
       {err && <p style={{ color: "var(--danger)", marginBottom: 0 }}>{err}</p>}
-      <p className="muted" style={{ marginBottom: 0 }}>No account? Ask an admin to create one.</p>
+      <p className="muted" style={{ marginBottom: 0 }}>{t("login.noAccount")}</p>
     </form>
   );
 }
@@ -172,15 +184,16 @@ export function LoginPage({ onLogin }) {
 // Author control on the capture forms. Members always post as themselves (the
 // server enforces it); manager and admin can pick a roster name or type one.
 function AuthorField({ me, people, value, onChange }) {
+  const { t } = useLang();
   if (!isManagerUp(me)) {
     return (
-      <div><label>Author</label>
-        <input value={me?.author || ""} readOnly title="Updates are posted under your name" />
+      <div><label>{t("author.label")}</label>
+        <input value={me?.author || ""} readOnly title={t("author.readonlyTitle")} />
       </div>
     );
   }
   return (
-    <div><label>Author (blank = you)</label>
+    <div><label>{t("author.labelManager")}</label>
       <input list="people-names" value={value} onChange={e => onChange(e.target.value)}
         placeholder={me.author} />
       <datalist id="people-names">
@@ -202,7 +215,10 @@ export function AdminPanel({ me, people, onPeopleChanged }) {
   );
 }
 
+const ROLES = ["member", "manager", "admin"];
+
 function UsersPanel({ me, people }) {
+  const { t } = useLang();
   const [users, setUsers] = useState([]);
   const [err, setErr] = useState("");
   const [form, setForm] = useState({ username: "", password: "", role: "member", person_id: "" });
@@ -210,13 +226,13 @@ function UsersPanel({ me, people }) {
 
   async function refresh() {
     try { setUsers(await api.listUsers()); setErr(""); }
-    catch (e) { setErr(e.message || "Could not load users."); }
+    catch (e) { setErr(e.message || t("error.loadUsers")); }
   }
   useEffect(() => { refresh(); }, []);
 
   const run = (fn) => async (...args) => {
     try { await fn(...args); await refresh(); }
-    catch (e) { setErr(e.message || "Action failed."); }
+    catch (e) { setErr(e.message || t("error.actionFailed")); }
   };
 
   const create = run(async () => {
@@ -232,80 +248,78 @@ function UsersPanel({ me, people }) {
   const setPerson = run((u, pid) => api.updateUser(u.id, pid ? { person_id: Number(pid) } : { clear_person: true }));
   const toggleActive = run((u) => api.updateUser(u.id, { is_active: !u.is_active }));
   const remove = run(async (u) => {
-    if (window.confirm(`Delete account "${u.username}"? This cannot be undone.`)) await api.deleteUser(u.id);
+    if (window.confirm(t("confirm.deleteUser", { username: u.username }))) await api.deleteUser(u.id);
   });
   const resetPassword = run(async (u) => {
-    const pw = window.prompt(`New password for "${u.username}" (min 8 characters):`);
+    const pw = window.prompt(t("prompt.newPassword", { username: u.username }));
     if (pw) await api.setUserPassword(u.id, { new_password: pw });
   });
 
   return (
     <div className="card">
-      <h2 style={{ marginTop: 0 }}>User accounts</h2>
+      <h2 style={{ marginTop: 0 }}>{t("admin.users.title")}</h2>
       <table>
-        <thead><tr><th>Username</th><th>Role</th><th>Person</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>{t("table.username")}</th><th>{t("table.role")}</th><th>{t("table.person")}</th><th>{t("table.status")}</th><th>{t("table.actions")}</th></tr></thead>
         <tbody>
           {users.map(u => (
             <tr key={u.id}>
-              <td>{u.username}{u.id === me.id && <span className="muted"> (you)</span>}</td>
+              <td>{u.username}{u.id === me.id && <span className="muted"> {t("common.you")}</span>}</td>
               <td>
                 <select value={u.role} onChange={e => setRole(u, e.target.value)} style={{ width: "auto" }}>
-                  <option>member</option><option>manager</option><option>admin</option>
+                  {ROLES.map(r => <option key={r} value={r}>{t(`role.${r}`)}</option>)}
                 </select>
               </td>
               <td>
                 <select value={u.person_id ?? ""} onChange={e => setPerson(u, e.target.value)} style={{ width: "auto" }}
-                  title="Roster person this account posts as">
-                  <option value="">(none)</option>
+                  title={t("admin.users.personSelectTitle")}>
+                  <option value="">{t("common.none")}</option>
                   {people.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </td>
-              <td>{u.is_active ? <span className="tag done">active</span> : <span className="tag blocked">disabled</span>}</td>
+              <td>{u.is_active ? <span className="tag done">{t("status.active")}</span> : <span className="tag blocked">{t("status.disabled")}</span>}</td>
               <td>
-                <button className="link" onClick={() => resetPassword(u)}>set password</button>
-                <button className="link" onClick={() => toggleActive(u)}>{u.is_active ? "disable" : "enable"}</button>
-                <button className="link" style={{ color: "var(--danger)" }} onClick={() => remove(u)}>delete</button>
+                <button className="link" onClick={() => resetPassword(u)}>{t("action.setPassword")}</button>
+                <button className="link" onClick={() => toggleActive(u)}>{u.is_active ? t("action.disable") : t("action.enable")}</button>
+                <button className="link" style={{ color: "var(--danger)" }} onClick={() => remove(u)}>{t("action.delete")}</button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      <h2>Add account</h2>
+      <h2>{t("admin.users.add")}</h2>
       <div className="row">
-        <div><label>Username</label><input value={form.username} onChange={e => set("username", e.target.value)} /></div>
-        <div><label>Password (min 8 chars)</label>
+        <div><label>{t("table.username")}</label><input value={form.username} onChange={e => set("username", e.target.value)} /></div>
+        <div><label>{t("admin.users.passwordLabel")}</label>
           <input type="password" value={form.password} onChange={e => set("password", e.target.value)} /></div>
-        <div><label>Role</label>
+        <div><label>{t("table.role")}</label>
           <select value={form.role} onChange={e => set("role", e.target.value)}>
-            <option>member</option><option>manager</option><option>admin</option>
+            {ROLES.map(r => <option key={r} value={r}>{t(`role.${r}`)}</option>)}
           </select>
         </div>
-        <div><label>Person (optional)</label>
+        <div><label>{t("admin.users.personLabel")}</label>
           <select value={form.person_id} onChange={e => set("person_id", e.target.value)}>
-            <option value="">(none)</option>
+            <option value="">{t("common.none")}</option>
             {people.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
       </div>
-      <button onClick={create} disabled={!form.username.trim() || form.password.length < 8}>Add account</button>
+      <button onClick={create} disabled={!form.username.trim() || form.password.length < 8}>{t("admin.users.add")}</button>
       {err && <p style={{ color: "var(--danger)", marginBottom: 0 }}>{err}</p>}
-      <p className="muted" style={{ marginBottom: 0 }}>
-        Linking a person makes that account post updates under the roster name,
-        which feeds the team and person rollups.
-      </p>
+      <p className="muted" style={{ marginBottom: 0 }}>{t("admin.users.hint")}</p>
     </div>
   );
 }
 
 function PeoplePanel({ people, onChanged }) {
+  const { t } = useLang();
   const [err, setErr] = useState("");
   const [form, setForm] = useState({ name: "", name_ja: "", team: "", department: "" });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const run = (fn) => async (...args) => {
     try { await fn(...args); onChanged(); setErr(""); }
-    catch (e) { setErr(e.message || "Action failed."); }
+    catch (e) { setErr(e.message || t("error.actionFailed")); }
   };
 
   const create = run(async () => {
@@ -318,22 +332,22 @@ function PeoplePanel({ people, onChanged }) {
     setForm({ name: "", name_ja: "", team: "", department: "" });
   });
   const edit = run(async (p) => {
-    const team = window.prompt(`Team for ${p.name}:`, p.team || "");
+    const team = window.prompt(t("prompt.teamFor", { name: p.name }), p.team || "");
     if (team === null) return;
-    const department = window.prompt(`Department for ${p.name}:`, p.department || "");
+    const department = window.prompt(t("prompt.departmentFor", { name: p.name }), p.department || "");
     if (department === null) return;
     await api.updatePerson(p.id, { name: p.name, name_ja: p.name_ja, team: team || null, department: department || null });
   });
   const remove = run(async (p) => {
-    if (window.confirm(`Remove "${p.name}" from the roster?`)) await api.deletePerson(p.id);
+    if (window.confirm(t("confirm.removePerson", { name: p.name }))) await api.deletePerson(p.id);
   });
 
   return (
     <div className="card">
-      <h2 style={{ marginTop: 0 }}>People (org roster)</h2>
-      {people.length === 0 ? <p className="muted">No people yet. Names drive the team and person reports.</p> : (
+      <h2 style={{ marginTop: 0 }}>{t("admin.people.title")}</h2>
+      {people.length === 0 ? <p className="muted">{t("admin.people.empty")}</p> : (
         <table>
-          <thead><tr><th>Name</th><th>Japanese name</th><th>Team</th><th>Department</th><th>Actions</th></tr></thead>
+          <thead><tr><th>{t("table.name")}</th><th>{t("table.nameJa")}</th><th>{t("table.team")}</th><th>{t("table.department")}</th><th>{t("table.actions")}</th></tr></thead>
           <tbody>
             {people.map(p => (
               <tr key={p.id}>
@@ -342,8 +356,8 @@ function PeoplePanel({ people, onChanged }) {
                 <td>{p.team || "-"}</td>
                 <td className="muted">{p.department || "-"}</td>
                 <td>
-                  <button className="link" onClick={() => edit(p)}>edit</button>
-                  <button className="link" style={{ color: "var(--danger)" }} onClick={() => remove(p)}>delete</button>
+                  <button className="link" onClick={() => edit(p)}>{t("action.edit")}</button>
+                  <button className="link" style={{ color: "var(--danger)" }} onClick={() => remove(p)}>{t("action.delete")}</button>
                 </td>
               </tr>
             ))}
@@ -351,14 +365,14 @@ function PeoplePanel({ people, onChanged }) {
         </table>
       )}
 
-      <h2>Add person</h2>
+      <h2>{t("admin.people.add")}</h2>
       <div className="row">
-        <div><label>Name</label><input value={form.name} onChange={e => set("name", e.target.value)} /></div>
-        <div><label>Japanese name</label><input value={form.name_ja} onChange={e => set("name_ja", e.target.value)} /></div>
-        <div><label>Team</label><input value={form.team} onChange={e => set("team", e.target.value)} /></div>
-        <div><label>Department</label><input value={form.department} onChange={e => set("department", e.target.value)} /></div>
+        <div><label>{t("table.name")}</label><input value={form.name} onChange={e => set("name", e.target.value)} /></div>
+        <div><label>{t("table.nameJa")}</label><input value={form.name_ja} onChange={e => set("name_ja", e.target.value)} /></div>
+        <div><label>{t("table.team")}</label><input value={form.team} onChange={e => set("team", e.target.value)} /></div>
+        <div><label>{t("table.department")}</label><input value={form.department} onChange={e => set("department", e.target.value)} /></div>
       </div>
-      <button onClick={create} disabled={!form.name.trim()}>Add person</button>
+      <button onClick={create} disabled={!form.name.trim()}>{t("admin.people.add")}</button>
       {err && <p style={{ color: "var(--danger)", marginBottom: 0 }}>{err}</p>}
     </div>
   );
@@ -369,13 +383,14 @@ function PeoplePanel({ people, onChanged }) {
 // Reads GET /settings and /settings/models; PUT sends only the changed fields.
 // The API key is write-only: typed here, sent once, never echoed back.
 // ---------------------------------------------------------------------------
-const PROVIDER_LABEL = {
-  ollama: "Local (Ollama)",
-  openai: "OpenAI compatible API",
-  anthropic: "Anthropic API",
+const PROVIDER_KEYS = {
+  ollama: "settings.providerLocal",
+  openai: "settings.providerOpenAI",
+  anthropic: "settings.providerAnthropic",
 };
 
 export function SettingsPanel({ onSaved, onClose }) {
+  const { t } = useLang();
   const [form, setForm] = useState(null);        // editable copy of GET /settings
   const [dirty, setDirty] = useState({});        // only these fields are sent on save
   const [apiKey, setApiKey] = useState("");      // write-only; empty = leave unchanged
@@ -388,7 +403,7 @@ export function SettingsPanel({ onSaved, onClose }) {
     try { setModels(await api.listModels()); } catch { /* panel still usable */ }
   }
   useEffect(() => {
-    api.getSettings().then(setForm).catch(e => setErr(e.message || "Could not load settings."));
+    api.getSettings().then(setForm).catch(e => setErr(e.message || t("error.loadSettings")));
     loadModels();
   }, []);
 
@@ -408,13 +423,13 @@ export function SettingsPanel({ onSaved, onClose }) {
       setForm(s); setDirty({}); setApiKey(""); setSaved(true);
       onSaved(s);
     } catch (e) {
-      setErr(e.message || "Could not save settings.");
+      setErr(e.message || t("error.saveSettings"));
     } finally {
       setBusy(false);
     }
   }
 
-  if (!form) return <div className="card"><p className="muted">{err || "Loading settings…"}</p></div>;
+  if (!form) return <div className="card"><p className="muted">{err || t("settings.loading")}</p></div>;
 
   const cloud = form.llm_provider !== "ollama";
   // The configured model may not be in the installed list (e.g. Ollama down);
@@ -426,18 +441,18 @@ export function SettingsPanel({ onSaved, onClose }) {
   return (
     <div className="card" style={{ borderColor: "var(--accent)" }}>
       <div className="row" style={{ alignItems: "center" }}>
-        <h2 style={{ margin: 0 }}>Settings</h2>
+        <h2 style={{ margin: 0 }}>{t("settings.title")}</h2>
         <span style={{ flex: 1 }} />
-        <button className="link" onClick={onClose}>close</button>
+        <button className="link" onClick={onClose}>{t("settings.close")}</button>
       </div>
 
-      <label>LLM provider</label>
+      <label>{t("settings.providerLabel")}</label>
       <div className="row" role="radiogroup">
-        {Object.entries(PROVIDER_LABEL).map(([value, label]) => (
+        {Object.entries(PROVIDER_KEYS).map(([value, key]) => (
           <label key={value} style={{ fontWeight: 400, display: "flex", alignItems: "center", gap: 6, margin: 0 }}>
             <input type="radio" name="llm_provider" value={value} style={{ width: "auto" }}
               checked={form.llm_provider === value} onChange={() => set("llm_provider", value)} />
-            {label}
+            {t(key)}
           </label>
         ))}
       </div>
@@ -445,21 +460,20 @@ export function SettingsPanel({ onSaved, onClose }) {
       {cloud ? (
         <>
           <div className="cloudwarn">
-            Cloud mode: update text is sent to an external API for extraction.
-            Audio transcription stays on this machine either way.
+            {t("settings.cloudWarning")}
           </div>
           <div className="row">
-            <div><label>Model</label>
+            <div><label>{t("settings.model")}</label>
               <input value={form.llm_model} onChange={e => set("llm_model", e.target.value)}
                 placeholder={form.llm_provider === "openai" ? "gpt-4o-mini" : "claude-haiku-4-5-20251001"} />
             </div>
-            <div><label>API key {form.api_key_set ? "(set)" : "(not set)"}</label>
+            <div><label>{form.api_key_set ? t("settings.apiKeySet") : t("settings.apiKeyNotSet")}</label>
               <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
-                placeholder={form.api_key_set ? "leave blank to keep the current key" : "paste the key"} />
+                placeholder={form.api_key_set ? t("settings.apiKeyPlaceholderSet") : t("settings.apiKeyPlaceholderUnset")} />
             </div>
           </div>
           {form.llm_provider === "openai" && (
-            <div><label>Base URL (optional, for vLLM or another compatible server)</label>
+            <div><label>{t("settings.baseUrl")}</label>
               <input value={form.llm_base_url} onChange={e => set("llm_base_url", e.target.value)}
                 placeholder="https://api.openai.com" />
             </div>
@@ -467,45 +481,45 @@ export function SettingsPanel({ onSaved, onClose }) {
         </>
       ) : (
         <div className="row">
-          <div><label>Model</label>
+          <div><label>{t("settings.model")}</label>
             <select value={form.llm_model} onChange={e => set("llm_model", e.target.value)}>
               {ollamaOptions.map(m => <option key={m}>{m}</option>)}
             </select>
           </div>
-          <div><label>Ollama URL</label>
+          <div><label>{t("settings.ollamaUrl")}</label>
             <input value={form.ollama_url} onChange={e => set("ollama_url", e.target.value)} />
           </div>
           <div style={{ flex: "0 0 auto", alignSelf: "flex-end" }}>
-            <button style={{ marginTop: 0 }} onClick={loadModels} title="Re-list installed models">Refresh</button>
+            <button style={{ marginTop: 0 }} onClick={loadModels} title={t("settings.refreshTitle")}>{t("settings.refresh")}</button>
           </div>
         </div>
       )}
       {!cloud && models.warning && <p className="muted" style={{ color: "var(--danger)" }}>{models.warning}</p>}
 
-      <label style={{ marginTop: 14 }}>Speech to text (Whisper, always local)</label>
+      <label style={{ marginTop: 14 }}>{t("settings.whisperLabel")}</label>
       <div className="row">
-        <div><label>Model size</label>
+        <div><label>{t("settings.modelSize")}</label>
           <select value={form.whisper_model} onChange={e => set("whisper_model", e.target.value)}>
             {(models.whisper_sizes.length ? models.whisper_sizes : [form.whisper_model]).map(s => <option key={s}>{s}</option>)}
           </select>
         </div>
-        <div><label>Device</label>
+        <div><label>{t("settings.device")}</label>
           <select value={form.whisper_device} onChange={e => set("whisper_device", e.target.value)}>
             <option value="cpu">cpu</option>
             <option value="cuda">cuda (NVIDIA GPU)</option>
           </select>
         </div>
       </div>
-      <p className="muted">Changing the size downloads that model on the next transcription (up to ~3 GB for large).</p>
+      <p className="muted">{t("settings.whisperHint")}</p>
 
       <details style={{ marginTop: 8 }}>
-        <summary className="muted" style={{ cursor: "pointer" }}>Advanced</summary>
+        <summary className="muted" style={{ cursor: "pointer" }}>{t("settings.advanced")}</summary>
         <div className="row">
-          <div><label>Temperature (0 = deterministic)</label>
+          <div><label>{t("settings.temperature")}</label>
             <input type="number" min="0" max="2" step="0.1" value={form.llm_temperature}
               onChange={e => set("llm_temperature", Number(e.target.value))} />
           </div>
-          <div><label>LLM timeout (seconds)</label>
+          <div><label>{t("settings.timeout")}</label>
             <input type="number" min="1" max="600" value={form.llm_timeout}
               onChange={e => set("llm_timeout", Number(e.target.value))} />
           </div>
@@ -513,8 +527,8 @@ export function SettingsPanel({ onSaved, onClose }) {
       </details>
 
       <div className="row" style={{ alignItems: "center" }}>
-        <button onClick={save} disabled={busy}>{busy ? "Saving…" : "Save settings"}</button>
-        {saved && <span className="tag done" style={{ marginTop: 12 }}>Saved. Applies to the next extraction.</span>}
+        <button onClick={save} disabled={busy}>{busy ? t("settings.saving") : t("settings.save")}</button>
+        {saved && <span className="tag done" style={{ marginTop: 12 }}>{t("settings.saved")}</span>}
       </div>
       {err && <p style={{ color: "var(--danger)", marginBottom: 0 }}>{err}</p>}
     </div>
@@ -525,9 +539,10 @@ export function SettingsPanel({ onSaved, onClose }) {
 // Manager dashboard (week 5): fixed KPIs read from GET /dashboard. Read-only.
 // ---------------------------------------------------------------------------
 const STATUS_SEG = ["not_started", "in_progress", "blocked", "done"];
-const STATUS_LABEL = { not_started: "Not started", in_progress: "In progress", blocked: "Blocked", done: "Done" };
 
 export function Dashboard({ tick, me }) {
+  const { t } = useLang();
+  const statusLabel = (s) => (STATUS.includes(s) ? t(`status.${s}`) : s);
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
   const [config, setConfig] = useState(null);     // active ViewConfig, null = full view
@@ -542,7 +557,7 @@ export function Dashboard({ tick, me }) {
 
   async function loadFull() {
     try { setD(await api.dashboard()); setConfig(null); setErr(""); }
-    catch (e) { setErr(e.message || "Could not load dashboard."); }
+    catch (e) { setErr(e.message || t("error.loadDashboard")); }
   }
   async function refreshViews() {
     try { setViews(await api.listViews()); } catch { /* ignore */ }
@@ -561,13 +576,13 @@ export function Dashboard({ tick, me }) {
     try {
       const r = await api.configureDashboard({ request: q });
       setConfig(r.config); setD(r.dashboard);
-    } catch (e) { setErr(e.message || "Could not interpret that command."); }
+    } catch (e) { setErr(e.message || t("error.command")); }
     finally { setBusy(false); }
   }
   async function applySaved(v) {
     setBusy(true); setErr("");
     try { const r = await api.applyView(v.config); setConfig(r.config); setD(r.dashboard); setCmd(v.name); }
-    catch (e) { setErr(e.message || "Could not apply view."); }
+    catch (e) { setErr(e.message || t("error.applyView")); }
     finally { setBusy(false); }
   }
   // Preset chips: deterministic configs from the backend, applied with no LLM in the
@@ -579,7 +594,7 @@ export function Dashboard({ tick, me }) {
     try {
       const r = await api.applyView(cfg);
       setConfig(r.config); setD(r.dashboard); setCmd(fill(p.nl_phrase));
-    } catch (e) { setErr(e.message || "Could not apply view."); }
+    } catch (e) { setErr(e.message || t("error.applyView")); }
     finally { setBusy(false); }
   }
   async function saveCurrent() {
@@ -600,14 +615,14 @@ export function Dashboard({ tick, me }) {
         try {
           const fd = new FormData(); fd.append("file", new Blob(chunks, { type: rec.mimeType || "audio/webm" }), "cmd.webm");
           const r = await api.transcribe(fd); setCmd(r.text); runCmd(r.text);
-        } catch (e) { setErr(e.message || "Transcription failed."); }
+        } catch (e) { setErr(e.message || t("error.transcribe")); }
       };
       recRef.current = rec; rec.start(); setRecording(true);
-    } catch (e) { setErr("Microphone unavailable: " + (e.message || e)); }
+    } catch (e) { setErr(t("ai.micUnavailable", { err: e.message || e })); }
   }
 
   if (err && !d) return <div className="card" style={{ borderColor: "var(--danger)", color: "var(--danger)" }}>{err}</div>;
-  if (!d) return <div className="card"><p className="muted">Loading dashboard…</p></div>;
+  if (!d) return <div className="card"><p className="muted">{t("dash.loading")}</p></div>;
 
   const totalTasks = d.totals.tasks || 0;
   const pct = (n) => (totalTasks ? (n / totalTasks) * 100 : 0);
@@ -615,7 +630,7 @@ export function Dashboard({ tick, me }) {
   const hide = config?.hide || [];
   const vis = (s) => (sections.length === 0 || sections.includes(s)) && !hide.includes(s);
   const chipBits = config && [
-    config.project, config.status && STATUS_LABEL[config.status], config.severity && `${config.severity} sev`,
+    config.project, config.status && statusLabel(config.status), config.severity && `${config.severity} sev`,
     config.team && `team: ${config.team}`, config.person && `person: ${config.person}`,
     config.sort && `by ${config.sort}`, config.limit && `top ${config.limit}`,
     config.days && `last ${config.days} days`,
@@ -628,9 +643,9 @@ export function Dashboard({ tick, me }) {
       <div className="card cmdbar">
         {presets.presets.length > 0 && (
           <div className="presets">
-            <span className="muted">Quick views:</span>
+            <span className="muted">{t("dash.quickViews")}</span>
             {presets.teams.length > 0 && (
-              <select className="teamsel" value={team} onChange={e => setTeam(e.target.value)} title="Team for the team presets">
+              <select className="teamsel" value={team} onChange={e => setTeam(e.target.value)} title={t("dash.teamSelTitle")}>
                 {presets.teams.map(t => <option key={t}>{t}</option>)}
               </select>
             )}
@@ -645,30 +660,30 @@ export function Dashboard({ tick, me }) {
         <div className="cmdrow">
           <input value={cmd} onChange={e => setCmd(e.target.value)}
             onKeyDown={e => e.key === "Enter" && runCmd()}
-            placeholder='Reconfigure in words: "show only blocked tasks", "hide risks, top 3 blockers"' />
-          <button onClick={() => runCmd()} disabled={busy}>{busy ? "…" : "Run"}</button>
-          <button onClick={toggleMic} title="Speak a command"
+            placeholder={t("dash.cmdPlaceholder")} />
+          <button onClick={() => runCmd()} disabled={busy}>{busy ? "…" : t("dash.run")}</button>
+          <button onClick={toggleMic} title={t("dash.micTitle")}
             style={{ background: recording ? "#c0392b" : "#1f3864" }}>{recording ? "■" : "🎙"}</button>
         </div>
         {config && (
           <div className="activecfg">
-            <span className="tag view">view: {config.summary || "custom"}</span>
+            <span className="tag view">{t("dash.viewLabel", { summary: config.summary || t("dash.custom") })}</span>
             {chipBits.map((b, i) => <span key={i} className="tag">{b}</span>)}
-            <button className="link" onClick={loadFull}>clear</button>
+            <button className="link" onClick={loadFull}>{t("dash.clear")}</button>
             <span style={{ flex: 1 }} />
-            <input className="savein" value={saveName} onChange={e => setSaveName(e.target.value)} placeholder="name this view" />
-            <button onClick={saveCurrent} disabled={!saveName.trim()}>Save view</button>
+            <input className="savein" value={saveName} onChange={e => setSaveName(e.target.value)} placeholder={t("dash.savePlaceholder")} />
+            <button onClick={saveCurrent} disabled={!saveName.trim()}>{t("dash.saveView")}</button>
           </div>
         )}
         {views.length > 0 && (
           <div className="savedviews">
-            <span className="muted">Saved:</span>
+            <span className="muted">{t("dash.saved")}</span>
             {views.map(v => (
               <span key={v.id} className="viewchip">
                 <button className="vname" onClick={() => applySaved(v)}>{v.name}</button>
                 {/* delete: the creator, or manager+ (shared/legacy views have no creator) */}
                 {(!me || isManagerUp(me) || v.created_by === me.id) && (
-                  <button className="vx" onClick={() => removeView(v.id)} title="Delete">×</button>
+                  <button className="vx" onClick={() => removeView(v.id)} title={t("dash.deleteViewTitle")}>×</button>
                 )}
               </span>
             ))}
@@ -678,54 +693,54 @@ export function Dashboard({ tick, me }) {
       </div>
 
       <div className="kpis">
-        <div className="kpi"><div className="n">{d.totals.projects}</div><div className="l">Projects</div></div>
-        <div className="kpi"><div className="n">{d.totals.tasks}</div><div className="l">Tasks</div></div>
-        <div className="kpi"><div className="n">{d.overall_progress}%</div><div className="l">Overall progress</div></div>
-        <div className={"kpi" + (d.open_blockers ? " warn" : "")}><div className="n">{d.open_blockers}</div><div className="l">Open blockers</div></div>
-        <div className={"kpi" + (d.open_risks ? " warn" : "")}><div className="n">{d.open_risks}</div><div className="l">Open risks</div></div>
+        <div className="kpi"><div className="n">{d.totals.projects}</div><div className="l">{t("kpi.projects")}</div></div>
+        <div className="kpi"><div className="n">{d.totals.tasks}</div><div className="l">{t("kpi.tasks")}</div></div>
+        <div className="kpi"><div className="n">{d.overall_progress}%</div><div className="l">{t("kpi.overallProgress")}</div></div>
+        <div className={"kpi" + (d.open_blockers ? " warn" : "")}><div className="n">{d.open_blockers}</div><div className="l">{t("kpi.openBlockers")}</div></div>
+        <div className={"kpi" + (d.open_risks ? " warn" : "")}><div className="n">{d.open_risks}</div><div className="l">{t("kpi.openRisks")}</div></div>
       </div>
 
       {vis("trends") && <div className="row" style={{ alignItems: "stretch" }}>
         <div className="card" style={{ flex: 1 }}>
-          <div className="h3">Progress over time</div>
+          <div className="h3">{t("dash.progressOverTime")}</div>
           <TrendChart points={d.trends?.progress} max={100} unit="%" color="var(--trend-good)" />
         </div>
         <div className="card" style={{ flex: 1 }}>
-          <div className="h3">Open blockers over time</div>
+          <div className="h3">{t("dash.blockersOverTime")}</div>
           <TrendChart points={d.trends?.blockers} unit="" color="var(--danger)" step />
         </div>
       </div>}
 
       {vis("delivery") && <div className="card">
-        <div className="h3">Delivery status</div>
+        <div className="h3">{t("dash.deliveryStatus")}</div>
         <div className="segbar">
           {STATUS_SEG.map(s => pct(d.task_status_counts[s]) > 0 &&
             <div key={s} className={"seg s_" + s} style={{ width: pct(d.task_status_counts[s]) + "%" }}
-              title={`${STATUS_LABEL[s]}: ${d.task_status_counts[s]}`} />)}
+              title={`${statusLabel(s)}: ${d.task_status_counts[s]}`} />)}
         </div>
         <div className="seglegend">
           {STATUS_SEG.map(s => (
-            <span key={s}><span className={"sw seg s_" + s} />{STATUS_LABEL[s]}: {d.task_status_counts[s]}</span>
+            <span key={s}><span className={"sw seg s_" + s} />{statusLabel(s)}: {d.task_status_counts[s]}</span>
           ))}
         </div>
       </div>}
 
       {vis("per_project") && <div className="card">
-        <div className="h3">Projects</div>
+        <div className="h3">{t("dash.projectsTitle")}</div>
         <table>
-          <thead><tr><th>Project</th><th>Status</th><th>Progress</th><th>Tasks</th><th>Open blockers</th></tr></thead>
+          <thead><tr><th>{t("table.project")}</th><th>{t("table.status")}</th><th>{t("table.progress")}</th><th>{t("table.tasks")}</th><th>{t("table.openBlockers")}</th></tr></thead>
           <tbody>
             {d.per_project.map(p => (
               <tr key={p.id}>
                 <td>{p.name}{p.name_ja && <div className="muted">{p.name_ja}</div>}</td>
-                <td><span className={"st " + p.status}>{STATUS_LABEL[p.status] || p.status}</span></td>
+                <td><span className={"st " + p.status}>{statusLabel(p.status) || p.status}</span></td>
                 <td>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <div className="progress"><div style={{ width: p.avg_progress + "%" }} /></div>
                     <span className="muted">{p.avg_progress}%</span>
                   </div>
                 </td>
-                <td>{p.done_task_count}/{p.task_count} done</td>
+                <td>{t("table.doneOfTotal", { done: p.done_task_count, total: p.task_count })}</td>
                 <td>{p.open_blocker_count > 0 ? <span className="tag blocked">{p.open_blocker_count}</span> : <span className="muted">0</span>}</td>
               </tr>
             ))}
@@ -734,23 +749,23 @@ export function Dashboard({ tick, me }) {
       </div>}
 
       {vis("per_team") && (d.per_team?.length > 0) && <div className="card">
-        <div className="h3">Teams</div>
+        <div className="h3">{t("dash.teams")}</div>
         <table>
-          <thead><tr><th>Team</th><th>Department</th><th>Members</th><th>Progress</th><th>Tasks</th><th>Open blockers</th></tr></thead>
+          <thead><tr><th>{t("table.team")}</th><th>{t("table.department")}</th><th>{t("table.members")}</th><th>{t("table.progress")}</th><th>{t("table.tasks")}</th><th>{t("table.openBlockers")}</th></tr></thead>
           <tbody>
-            {d.per_team.map(t => (
-              <tr key={t.team}>
-                <td>{t.team}</td>
-                <td className="muted">{t.department || "-"}</td>
-                <td className="muted">{t.members.join(", ")}</td>
+            {d.per_team.map(t2 => (
+              <tr key={t2.team}>
+                <td>{t2.team}</td>
+                <td className="muted">{t2.department || "-"}</td>
+                <td className="muted">{t2.members.join(", ")}</td>
                 <td>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div className="progress"><div style={{ width: t.avg_progress + "%" }} /></div>
-                    <span className="muted">{t.avg_progress}%</span>
+                    <div className="progress"><div style={{ width: t2.avg_progress + "%" }} /></div>
+                    <span className="muted">{t2.avg_progress}%</span>
                   </div>
                 </td>
-                <td>{t.done_task_count}/{t.task_count} done</td>
-                <td>{t.open_blocker_count > 0 ? <span className="tag blocked">{t.open_blocker_count}</span> : <span className="muted">0</span>}</td>
+                <td>{t("table.doneOfTotal", { done: t2.done_task_count, total: t2.task_count })}</td>
+                <td>{t2.open_blocker_count > 0 ? <span className="tag blocked">{t2.open_blocker_count}</span> : <span className="muted">0</span>}</td>
               </tr>
             ))}
           </tbody>
@@ -758,9 +773,9 @@ export function Dashboard({ tick, me }) {
       </div>}
 
       {vis("per_person") && (d.per_person?.length > 0) && <div className="card">
-        <div className="h3">People</div>
+        <div className="h3">{t("dash.people")}</div>
         <table>
-          <thead><tr><th>Person</th><th>Team</th><th>Progress</th><th>Tasks</th><th>Open blockers</th><th>Next steps</th></tr></thead>
+          <thead><tr><th>{t("table.person")}</th><th>{t("table.team")}</th><th>{t("table.progress")}</th><th>{t("table.tasks")}</th><th>{t("table.openBlockers")}</th><th>{t("table.nextSteps")}</th></tr></thead>
           <tbody>
             {d.per_person.map(p => (
               <tr key={p.name}>
@@ -772,7 +787,7 @@ export function Dashboard({ tick, me }) {
                     <span className="muted">{p.avg_progress}%</span>
                   </div>
                 </td>
-                <td>{p.done_task_count}/{p.task_count} done</td>
+                <td>{t("table.doneOfTotal", { done: p.done_task_count, total: p.task_count })}</td>
                 <td>{p.open_blocker_count > 0 ? <span className="tag blocked">{p.open_blocker_count}</span> : <span className="muted">0</span>}</td>
                 <td>{p.next_step_count > 0 ? p.next_step_count : <span className="muted">0</span>}</td>
               </tr>
@@ -783,26 +798,26 @@ export function Dashboard({ tick, me }) {
 
       {(vis("blockers") || vis("risks")) && <div className="row" style={{ alignItems: "stretch" }}>
         {vis("blockers") && <div className="card" style={{ flex: 1 }}>
-          <div className="h3">Open blockers ({d.open_blockers})</div>
-          {d.blockers_list.length === 0 ? <p className="muted">None open.</p> : (
+          <div className="h3">{t("dash.openBlockersCount", { n: d.open_blockers })}</div>
+          {d.blockers_list.length === 0 ? <p className="muted">{t("dash.noneOpen")}</p> : (
             <div className="feed">
               {d.blockers_list.map((b, i) => (
                 <div key={i} className="item">
                   <span className={"sevdot " + b.severity} />{b.description}
-                  <div className="muted">{b.severity}{b.task ? ` · ${b.task}` : ""}{b.owner ? ` · ${b.owner}` : ""}</div>
+                  <div className="muted">{b.severity ? t(`severity.${b.severity}`) : ""}{b.task ? ` · ${b.task}` : ""}{b.owner ? ` · ${b.owner}` : ""}</div>
                 </div>
               ))}
             </div>
           )}
         </div>}
         {vis("risks") && <div className="card" style={{ flex: 1 }}>
-          <div className="h3">Risks ({d.open_risks})</div>
-          {d.risks_list.length === 0 ? <p className="muted">None flagged.</p> : (
+          <div className="h3">{t("dash.risksCount", { n: d.open_risks })}</div>
+          {d.risks_list.length === 0 ? <p className="muted">{t("dash.noneFlagged")}</p> : (
             <div className="feed">
               {d.risks_list.map((r, i) => (
                 <div key={i} className="item">
                   {r.description}
-                  <div className="muted">{r.impact ? `impact ${r.impact}` : ""}{r.mitigation ? ` · mitigation: ${r.mitigation}` : ""}{r.task ? ` · ${r.task}` : ""}</div>
+                  <div className="muted">{r.impact ? t("risk.impact", { impact: r.impact }) : ""}{r.mitigation ? ` · ${t("risk.mitigation", { mitigation: r.mitigation })}` : ""}{r.task ? ` · ${r.task}` : ""}</div>
                 </div>
               ))}
             </div>
@@ -812,16 +827,16 @@ export function Dashboard({ tick, me }) {
 
       {(vis("activity") || vis("next_steps")) && <div className="row" style={{ alignItems: "stretch" }}>
         {vis("activity") && <div className="card" style={{ flex: 1 }}>
-          <div className="h3">Recent activity</div>
-          {d.recent_updates.length === 0 ? <p className="muted">No updates yet.</p> : (
+          <div className="h3">{t("dash.recentActivity")}</div>
+          {d.recent_updates.length === 0 ? <p className="muted">{t("dash.noUpdates")}</p> : (
             <div className="feed">
               {d.recent_updates.map(u => (
                 <div key={u.id} className={"item" + (u.source === "voice" ? " voice" : "")}>
-                  {u.snippet || "(no text)"}
+                  {u.snippet || t("dash.noText")}
                   <div className="muted">
-                    {new Date(u.created_at).toLocaleDateString()} · {u.task || "(no task)"}
-                    {u.author ? ` · ${u.author}` : ""} · {u.source}{u.language === "ja" ? " · JA" : ""}
-                    {u.blocker_count ? ` · ${u.blocker_count} blocker(s)` : ""}
+                    {new Date(u.created_at).toLocaleDateString()} · {u.task || t("dash.noTask")}
+                    {u.author ? ` · ${u.author}` : ""} · {u.source ? t(`source.${u.source}`) : u.source}{u.language === "ja" ? " · JA" : ""}
+                    {u.blocker_count ? ` · ${t("dash.blockerCount", { n: u.blocker_count })}` : ""}
                   </div>
                 </div>
               ))}
@@ -829,13 +844,13 @@ export function Dashboard({ tick, me }) {
           )}
         </div>}
         {vis("next_steps") && <div className="card" style={{ flex: 1 }}>
-          <div className="h3">Upcoming next steps</div>
-          {d.upcoming_next_steps.length === 0 ? <p className="muted">Nothing queued.</p> : (
+          <div className="h3">{t("dash.upcomingNextSteps")}</div>
+          {d.upcoming_next_steps.length === 0 ? <p className="muted">{t("dash.nothingQueued")}</p> : (
             <div className="feed">
               {d.upcoming_next_steps.map((n, i) => (
                 <div key={i} className="item">
                   {n.description}
-                  <div className="muted">{n.due_date ? `due ${n.due_date}` : "no date"}{n.owner ? ` · ${n.owner}` : ""}{n.task ? ` · ${n.task}` : ""}</div>
+                  <div className="muted">{n.due_date ? t("dash.due", { date: n.due_date }) : t("dash.noDate")}{n.owner ? ` · ${n.owner}` : ""}{n.task ? ` · ${n.task}` : ""}</div>
                 </div>
               ))}
             </div>
@@ -850,7 +865,8 @@ export function Dashboard({ tick, me }) {
 // (right then down/up) for count series; otherwise a straight polyline. Scales to
 // `max` when given (progress 0-100), else to the series peak.
 export function TrendChart({ points, max, unit = "", color = "var(--accent)", step = false }) {
-  if (!points || points.length === 0) return <p className="muted">No history yet.</p>;
+  const { t } = useLang();
+  if (!points || points.length === 0) return <p className="muted">{t("dash.noHistory")}</p>;
   const W = 320, H = 96, PAD = 6;
   const hi = max ?? Math.max(...points.map(p => p.value), 1);
   const x = (i) => (points.length === 1 ? W / 2 : PAD + (i * (W - 2 * PAD)) / (points.length - 1));
@@ -879,6 +895,7 @@ export function TrendChart({ points, max, unit = "", color = "var(--accent)", st
 }
 
 function ProjectForm({ onDone }) {
+  const { t } = useLang();
   const [name, setName] = useState("");
   const [owner, setOwner] = useState("");
   async function submit() {
@@ -888,17 +905,18 @@ function ProjectForm({ onDone }) {
   }
   return (
     <div className="card">
-      <h2>Add project</h2>
+      <h2>{t("form.addProject")}</h2>
       <div className="row">
-        <div><label>Name</label><input value={name} onChange={e => setName(e.target.value)} /></div>
-        <div><label>Owner</label><input value={owner} onChange={e => setOwner(e.target.value)} /></div>
+        <div><label>{t("form.name")}</label><input value={name} onChange={e => setName(e.target.value)} /></div>
+        <div><label>{t("form.owner")}</label><input value={owner} onChange={e => setOwner(e.target.value)} /></div>
       </div>
-      <button onClick={submit}>Save project</button>
+      <button onClick={submit}>{t("form.saveProject")}</button>
     </div>
   );
 }
 
 function TaskForm({ projects, onDone }) {
+  const { t } = useLang();
   const [form, setForm] = useState({ project_id: "", title: "", assignee: "", status: "not_started", progress_pct: 0 });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   async function submit() {
@@ -908,31 +926,32 @@ function TaskForm({ projects, onDone }) {
   }
   return (
     <div className="card">
-      <h2>Add task</h2>
+      <h2>{t("form.addTask")}</h2>
       <div className="row">
-        <div><label>Project</label>
+        <div><label>{t("form.project")}</label>
           <select value={form.project_id} onChange={e => set("project_id", e.target.value)}>
-            <option value="">Select...</option>
+            <option value="">{t("form.selectEllipsis")}</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
-        <div><label>Title</label><input value={form.title} onChange={e => set("title", e.target.value)} /></div>
-        <div><label>Assignee</label><input value={form.assignee} onChange={e => set("assignee", e.target.value)} /></div>
+        <div><label>{t("form.title")}</label><input value={form.title} onChange={e => set("title", e.target.value)} /></div>
+        <div><label>{t("form.assignee")}</label><input value={form.assignee} onChange={e => set("assignee", e.target.value)} /></div>
       </div>
       <div className="row">
-        <div><label>Status</label>
+        <div><label>{t("form.status")}</label>
           <select value={form.status} onChange={e => set("status", e.target.value)}>
-            {STATUS.map(s => <option key={s}>{s}</option>)}
+            {STATUS.map(s => <option key={s} value={s}>{t(`status.${s}`)}</option>)}
           </select>
         </div>
-        <div><label>Progress %</label><input type="number" min="0" max="100" value={form.progress_pct} onChange={e => set("progress_pct", e.target.value)} /></div>
+        <div><label>{t("form.progressPct")}</label><input type="number" min="0" max="100" value={form.progress_pct} onChange={e => set("progress_pct", e.target.value)} /></div>
       </div>
-      <button onClick={submit}>Save task</button>
+      <button onClick={submit}>{t("form.saveTask")}</button>
     </div>
   );
 }
 
 function UpdateForm({ tasks, onDone, me, people = [] }) {
+  const { t } = useLang();
   const [form, setForm] = useState({ task_id: "", author: "", language: "en", raw_text: "" });
   const [blocker, setBlocker] = useState({ description: "", severity: "medium" });
   const [nextStep, setNextStep] = useState({ description: "", owner: "" });
@@ -958,36 +977,36 @@ function UpdateForm({ tasks, onDone, me, people = [] }) {
 
   return (
     <div className="card">
-      <h2>Add status update</h2>
+      <h2>{t("form.addUpdate")}</h2>
       <div className="row">
-        <div><label>Task</label>
+        <div><label>{t("form.task")}</label>
           <select value={form.task_id} onChange={e => set("task_id", e.target.value)}>
-            <option value="">Select...</option>
-            {tasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+            <option value="">{t("form.selectEllipsis")}</option>
+            {tasks.map(t2 => <option key={t2.id} value={t2.id}>{t2.title}</option>)}
           </select>
         </div>
         <AuthorField me={me} people={people} value={form.author} onChange={v => set("author", v)} />
-        <div><label>Language</label>
+        <div><label>{t("form.language")}</label>
           <select value={form.language} onChange={e => set("language", e.target.value)}>
-            <option value="en">English</option><option value="ja">Japanese</option>
+            <option value="en">{t("lang.english")}</option><option value="ja">{t("lang.japanese")}</option>
           </select>
         </div>
       </div>
-      <label>Update text</label>
+      <label>{t("form.updateText")}</label>
       <textarea rows="2" value={form.raw_text} onChange={e => set("raw_text", e.target.value)} />
       <div className="row">
-        <div><label>Blocker (optional)</label><input value={blocker.description} onChange={e => setBlocker(b => ({ ...b, description: e.target.value }))} /></div>
-        <div><label>Severity</label>
+        <div><label>{t("form.blockerOptional")}</label><input value={blocker.description} onChange={e => setBlocker(b => ({ ...b, description: e.target.value }))} /></div>
+        <div><label>{t("form.severity")}</label>
           <select value={blocker.severity} onChange={e => setBlocker(b => ({ ...b, severity: e.target.value }))}>
-            {SEVERITY.map(s => <option key={s}>{s}</option>)}
+            {SEVERITY.map(s => <option key={s} value={s}>{t(`severity.${s}`)}</option>)}
           </select>
         </div>
       </div>
       <div className="row">
-        <div><label>Next step (optional)</label><input value={nextStep.description} onChange={e => setNextStep(n => ({ ...n, description: e.target.value }))} /></div>
-        <div><label>Owner</label><input value={nextStep.owner} onChange={e => setNextStep(n => ({ ...n, owner: e.target.value }))} /></div>
+        <div><label>{t("form.nextStepOptional")}</label><input value={nextStep.description} onChange={e => setNextStep(n => ({ ...n, description: e.target.value }))} /></div>
+        <div><label>{t("form.owner")}</label><input value={nextStep.owner} onChange={e => setNextStep(n => ({ ...n, owner: e.target.value }))} /></div>
       </div>
-      <button className="secondary" onClick={submit}>Save update</button>
+      <button className="secondary" onClick={submit}>{t("form.saveUpdate")}</button>
     </div>
   );
 }
@@ -999,6 +1018,7 @@ function UpdateForm({ tasks, onDone, me, people = [] }) {
 // until "Confirm & save".
 // ---------------------------------------------------------------------------
 function AiUpdateForm({ tasks, onDone, me, people = [] }) {
+  const { t } = useLang();
   const [text, setText] = useState("");
   const [language, setLanguage] = useState("en");
   const [author, setAuthor] = useState("");
@@ -1017,11 +1037,11 @@ function AiUpdateForm({ tasks, onDone, me, people = [] }) {
       const fd = new FormData();
       fd.append("file", blob, blob.name || "clip.webm");
       const r = await api.transcribe(fd);
-      setText(t => (t ? t + " " : "") + r.text);
+      setText(t2 => (t2 ? t2 + " " : "") + r.text);
       if (r.language === "en" || r.language === "ja") setLanguage(r.language);
       setSource("voice");
     } catch (e) {
-      setErr(e.message || "Transcription failed.");
+      setErr(e.message || t("error.transcribe"));
     } finally {
       setTranscribing(false);
     }
@@ -1036,7 +1056,7 @@ function AiUpdateForm({ tasks, onDone, me, people = [] }) {
       const chunks = [];
       rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
       rec.onstop = () => {
-        stream.getTracks().forEach(t => t.stop());
+        stream.getTracks().forEach(t2 => t2.stop());
         setRecording(false);
         sendAudio(new Blob(chunks, { type: rec.mimeType || "audio/webm" }));
       };
@@ -1044,7 +1064,7 @@ function AiUpdateForm({ tasks, onDone, me, people = [] }) {
       rec.start();
       setRecording(true);
     } catch (e) {
-      setErr("Microphone unavailable: " + (e.message || e));
+      setErr(t("ai.micUnavailable", { err: e.message || e }));
     }
   }
 
@@ -1061,7 +1081,7 @@ function AiUpdateForm({ tasks, onDone, me, people = [] }) {
       const d = await api.extractUpdate({ raw_text: text, language });
       setDraft(d);
     } catch (e) {
-      setErr(e.message || "Extraction failed.");
+      setErr(e.message || t("error.extract"));
     } finally {
       setBusy(false);
     }
@@ -1101,125 +1121,125 @@ function AiUpdateForm({ tasks, onDone, me, people = [] }) {
 
   return (
     <div className="card" style={{ borderColor: "var(--accent)" }}>
-      <h2>Add update by voice or text (AI)</h2>
+      <h2>{t("ai.title")}</h2>
       <div className="row" style={{ alignItems: "center", marginBottom: 6 }}>
         <button onClick={toggleRecord} disabled={transcribing}
           style={{ marginTop: 0, background: recording ? "#c0392b" : "#1f3864" }}>
-          {recording ? "■ Stop recording" : "● Record"}
+          {recording ? t("ai.stopRecording") : t("ai.record")}
         </button>
         <label style={{ margin: 0, fontWeight: 400, color: "var(--muted)" }}>
-          or upload audio:&nbsp;
+          {t("ai.orUpload")}&nbsp;
           <input type="file" accept="audio/*" onChange={onPickFile} disabled={transcribing}
             style={{ width: "auto", display: "inline-block", padding: 2, border: 0 }} />
         </label>
-        {transcribing && <span className="muted">transcribing…</span>}
-        {source === "voice" && !transcribing && <span className="tag done">from voice</span>}
+        {transcribing && <span className="muted">{t("ai.transcribing")}</span>}
+        {source === "voice" && !transcribing && <span className="tag done">{t("ai.fromVoice")}</span>}
       </div>
-      <label>Update text (English, Japanese, or mixed): speak above, or type/edit here</label>
+      <label>{t("ai.updateTextLabel")}</label>
       <textarea rows="3" value={text} onChange={e => setText(e.target.value)}
-        placeholder="e.g. Checkout flow rework is about 60% done, wrapping up the payment screens by Friday." />
+        placeholder={t("ai.updateTextPlaceholder")} />
       <div className="row">
-        <div><label>Language</label>
+        <div><label>{t("form.language")}</label>
           <select value={language} onChange={e => setLanguage(e.target.value)}>
-            <option value="en">English</option><option value="ja">Japanese</option>
+            <option value="en">{t("lang.english")}</option><option value="ja">{t("lang.japanese")}</option>
           </select>
         </div>
         <AuthorField me={me} people={people} value={author} onChange={setAuthor} />
       </div>
       <button onClick={extract} disabled={busy || !text.trim()}>
-        {busy ? "Extracting..." : "Extract"}
+        {busy ? t("ai.extracting") : t("ai.extract")}
       </button>
       {err && <p style={{ color: "var(--danger)", marginBottom: 0 }}>{err}</p>}
 
       {draft && (
         <div style={{ marginTop: 16, borderTop: "1px solid var(--border-soft)", paddingTop: 12 }}>
           <div className="row" style={{ alignItems: "center" }}>
-            <h3 style={{ margin: 0, fontSize: 15 }}>Confirm the extracted update</h3>
-            <span className="muted">model confidence: {Math.round((draft.confidence || 0) * 100)}%</span>
+            <h3 style={{ margin: 0, fontSize: 15 }}>{t("ai.confirmTitle")}</h3>
+            <span className="muted">{t("ai.confidence", { pct: Math.round((draft.confidence || 0) * 100) })}</span>
           </div>
 
           {draft.unknown_project &&
-            <p className="tag blocked">Project not recognized. Pick the right task below, or add the project/task first.</p>}
+            <p className="tag blocked">{t("ai.unknownProject")}</p>}
           {draft.unknown_task && !draft.unknown_project &&
-            <p className="tag blocked">Task "{draft.task}" did not match a known task. Pick it below.</p>}
+            <p className="tag blocked">{t("ai.unknownTask", { task: draft.task })}</p>}
 
           <div className="row">
-            <div><label>Project (matched)</label>
-              <input value={draft.project === "unknown" ? "(unknown)" : draft.project} readOnly />
+            <div><label>{t("ai.projectMatched")}</label>
+              <input value={draft.project === "unknown" ? t("ai.unknown") : draft.project} readOnly />
             </div>
-            <div><label>Task</label>
+            <div><label>{t("form.task")}</label>
               <select value={draft.task_id ?? ""} onChange={e => setField("task_id", e.target.value ? Number(e.target.value) : null)}>
-                <option value="">(no task)</option>
-                {tasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+                <option value="">{t("ai.noTaskOption")}</option>
+                {tasks.map(t2 => <option key={t2.id} value={t2.id}>{t2.title}</option>)}
               </select>
             </div>
           </div>
           <div className="row">
-            <div><label>Status</label>
+            <div><label>{t("form.status")}</label>
               <select value={draft.status ?? ""} onChange={e => setField("status", e.target.value || null)}>
-                <option value="">(none)</option>
-                {STATUS.map(s => <option key={s}>{s}</option>)}
+                <option value="">{t("common.none")}</option>
+                {STATUS.map(s => <option key={s} value={s}>{t(`status.${s}`)}</option>)}
               </select>
             </div>
-            <div><label>Progress %</label>
+            <div><label>{t("form.progressPct")}</label>
               <input type="number" min="0" max="100" value={draft.progress_pct ?? ""}
                 onChange={e => setField("progress_pct", e.target.value === "" ? null : Number(e.target.value))} />
             </div>
-            <div><label>Period</label>
+            <div><label>{t("ai.period")}</label>
               <input value={draft.period ?? ""} onChange={e => setField("period", e.target.value || null)} />
             </div>
           </div>
           {draft.owners?.length > 0 &&
-            <p className="muted">Owners detected: {draft.owners.join(", ")}</p>}
+            <p className="muted">{t("ai.ownersDetected", { names: draft.owners.join(", ") })}</p>}
 
-          <DraftList title="Blockers" items={draft.blockers}
+          <DraftList title={t("ai.blockers")} items={draft.blockers}
             onAdd={() => addItem("blockers", { description: "", severity: "medium", owner: "", status: "open" })}
             onDrop={i => dropItem("blockers", i)}
             render={(b, i) => (
               <div className="row">
-                <div style={{ flex: 3 }}><input placeholder="description" value={b.description}
+                <div style={{ flex: 3 }}><input placeholder={t("draftlist.descPlaceholder")} value={b.description}
                   onChange={e => editItem("blockers", i, { description: e.target.value })} /></div>
                 <div><select value={b.severity ?? "medium"} onChange={e => editItem("blockers", i, { severity: e.target.value })}>
-                  {SEVERITY.map(s => <option key={s}>{s}</option>)}</select></div>
-                <div><input placeholder="owner" value={b.owner ?? ""} onChange={e => editItem("blockers", i, { owner: e.target.value })} /></div>
+                  {SEVERITY.map(s => <option key={s} value={s}>{t(`severity.${s}`)}</option>)}</select></div>
+                <div><input placeholder={t("draftlist.ownerPlaceholder")} value={b.owner ?? ""} onChange={e => editItem("blockers", i, { owner: e.target.value })} /></div>
                 <div><select value={b.status ?? "open"} onChange={e => editItem("blockers", i, { status: e.target.value })}>
-                  <option>open</option><option>resolved</option></select></div>
+                  <option value="open">{t("draftlist.open")}</option><option value="resolved">{t("draftlist.resolved")}</option></select></div>
               </div>
             )} />
 
-          <DraftList title="Risks" items={draft.risks}
+          <DraftList title={t("ai.risks")} items={draft.risks}
             onAdd={() => addItem("risks", { description: "", likelihood: "", impact: "", mitigation: "", owner: "" })}
             onDrop={i => dropItem("risks", i)}
             render={(r, i) => (
               <>
                 <div className="row">
-                  <div style={{ flex: 2 }}><input placeholder="description" value={r.description}
+                  <div style={{ flex: 2 }}><input placeholder={t("draftlist.descPlaceholder")} value={r.description}
                     onChange={e => editItem("risks", i, { description: e.target.value })} /></div>
-                  <div><input placeholder="likelihood" value={r.likelihood ?? ""} onChange={e => editItem("risks", i, { likelihood: e.target.value })} /></div>
-                  <div><input placeholder="impact" value={r.impact ?? ""} onChange={e => editItem("risks", i, { impact: e.target.value })} /></div>
+                  <div><input placeholder={t("draftlist.likelihoodPlaceholder")} value={r.likelihood ?? ""} onChange={e => editItem("risks", i, { likelihood: e.target.value })} /></div>
+                  <div><input placeholder={t("draftlist.impactPlaceholder")} value={r.impact ?? ""} onChange={e => editItem("risks", i, { impact: e.target.value })} /></div>
                 </div>
                 <div className="row">
-                  <div><input placeholder="mitigation" value={r.mitigation ?? ""} onChange={e => editItem("risks", i, { mitigation: e.target.value })} /></div>
-                  <div><input placeholder="owner" value={r.owner ?? ""} onChange={e => editItem("risks", i, { owner: e.target.value })} /></div>
+                  <div><input placeholder={t("draftlist.mitigationPlaceholder")} value={r.mitigation ?? ""} onChange={e => editItem("risks", i, { mitigation: e.target.value })} /></div>
+                  <div><input placeholder={t("draftlist.ownerPlaceholder")} value={r.owner ?? ""} onChange={e => editItem("risks", i, { owner: e.target.value })} /></div>
                 </div>
               </>
             )} />
 
-          <DraftList title="Next steps" items={draft.next_steps}
+          <DraftList title={t("ai.nextSteps")} items={draft.next_steps}
             onAdd={() => addItem("next_steps", { description: "", owner: "", due_date: "" })}
             onDrop={i => dropItem("next_steps", i)}
             render={(n, i) => (
               <div className="row">
-                <div style={{ flex: 3 }}><input placeholder="description" value={n.description}
+                <div style={{ flex: 3 }}><input placeholder={t("draftlist.descPlaceholder")} value={n.description}
                   onChange={e => editItem("next_steps", i, { description: e.target.value })} /></div>
-                <div><input placeholder="owner" value={n.owner ?? ""} onChange={e => editItem("next_steps", i, { owner: e.target.value })} /></div>
-                <div><input placeholder="due (YYYY-MM-DD)" value={n.due_date ?? ""} onChange={e => editItem("next_steps", i, { due_date: e.target.value || null })} /></div>
+                <div><input placeholder={t("draftlist.ownerPlaceholder")} value={n.owner ?? ""} onChange={e => editItem("next_steps", i, { owner: e.target.value })} /></div>
+                <div><input placeholder={t("draftlist.duePlaceholder")} value={n.due_date ?? ""} onChange={e => editItem("next_steps", i, { due_date: e.target.value || null })} /></div>
               </div>
             )} />
 
           <div className="row" style={{ marginTop: 8 }}>
-            <button className="secondary" onClick={confirm}>Confirm &amp; save</button>
-            <button onClick={() => setDraft(null)} style={{ background: "#888" }}>Discard</button>
+            <button className="secondary" onClick={confirm}>{t("ai.confirmSave")}</button>
+            <button onClick={() => setDraft(null)} style={{ background: "#888" }}>{t("ai.discard")}</button>
           </div>
         </div>
       )}
@@ -1228,29 +1248,31 @@ function AiUpdateForm({ tasks, onDone, me, people = [] }) {
 }
 
 function DraftList({ title, items, render, onAdd, onDrop }) {
+  const { t } = useLang();
   return (
     <div style={{ marginTop: 10 }}>
       <label>{title}</label>
-      {items.length === 0 && <p className="muted" style={{ margin: "2px 0" }}>none</p>}
+      {items.length === 0 && <p className="muted" style={{ margin: "2px 0" }}>{t("draftlist.none")}</p>}
       {items.map((it, i) => (
         <div key={i} style={{ display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 6 }}>
           <div style={{ flex: 1 }}>{render(it, i)}</div>
           <button onClick={() => onDrop(i)} style={{ background: "#c0392b", marginTop: 0, padding: "7px 10px" }}>×</button>
         </div>
       ))}
-      <button onClick={onAdd} style={{ background: "var(--chip-bg)", color: "var(--text)", marginTop: 4, padding: "5px 10px" }}>+ add</button>
+      <button onClick={onAdd} style={{ background: "var(--chip-bg)", color: "var(--text)", marginTop: 4, padding: "5px 10px" }}>{t("draftlist.add")}</button>
     </div>
   );
 }
 
 function UpdatesTable({ updates, tasks }) {
-  const taskTitle = (id) => tasks.find(t => t.id === id)?.title || "(no task)";
+  const { t } = useLang();
+  const taskTitle = (id) => tasks.find(t2 => t2.id === id)?.title || t("dash.noTask");
   return (
     <div className="card">
-      <h2>Recent updates</h2>
-      {updates.length === 0 ? <p className="muted">No updates yet. Add one above.</p> : (
+      <h2>{t("updates.title")}</h2>
+      {updates.length === 0 ? <p className="muted">{t("updates.empty")}</p> : (
         <table>
-          <thead><tr><th>When</th><th>Task</th><th>Author</th><th>Lang</th><th>Text</th><th>Blockers</th><th>Next steps</th></tr></thead>
+          <thead><tr><th>{t("table.when")}</th><th>{t("table.task")}</th><th>{t("table.author")}</th><th>{t("table.lang")}</th><th>{t("table.text")}</th><th>{t("table.blockers")}</th><th>{t("table.nextSteps")}</th></tr></thead>
           <tbody>
             {updates.map(u => (
               <tr key={u.id}>
@@ -1259,7 +1281,7 @@ function UpdatesTable({ updates, tasks }) {
                 <td>{u.author || "-"}</td>
                 <td>{u.language}</td>
                 <td>{u.raw_text || "-"}</td>
-                <td>{u.blockers.map(b => <span key={b.id} className={`tag ${b.severity === "high" ? "blocked" : ""}`}>{b.description} ({b.severity})</span>)}</td>
+                <td>{u.blockers.map(b => <span key={b.id} className={`tag ${b.severity === "high" ? "blocked" : ""}`}>{b.description} ({t(`severity.${b.severity}`)})</span>)}</td>
                 <td>{u.next_steps.map(n => <span key={n.id} className="tag">{n.description}{n.owner ? ` · ${n.owner}` : ""}</span>)}</td>
               </tr>
             ))}

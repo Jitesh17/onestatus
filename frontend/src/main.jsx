@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
+import { LangProvider } from "./i18n.js";
 
 // All styling lives in this injected block on purpose (no CSS build step).
 // Theming: 11 custom properties, light values on :root, dark overrides scoped to
@@ -127,4 +128,6 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <LangProvider><App /></LangProvider>
+);
