@@ -748,6 +748,69 @@ export function Dashboard({ tick, me }) {
         </table>
       </div>}
 
+      {vis("plan") && d.plan && <div className="card">
+        <div className="h3">{t("dash.planTitle")}</div>
+        <table>
+          <thead><tr><th>{t("table.project")}</th><th>{t("table.expected")}</th><th>{t("table.actual")}</th><th>{t("table.delta")}</th><th>{t("table.targetDate")}</th></tr></thead>
+          <tbody>
+            {d.plan.per_project.map(p => (
+              <tr key={p.id}>
+                <td>{p.name}{p.name_ja && <div className="muted">{p.name_ja}</div>}</td>
+                <td>{p.expected_pct == null ? <span className="muted">{t("plan.noDates")}</span> : `${p.expected_pct}%`}</td>
+                <td>{p.actual_pct}%</td>
+                <td>{p.delta == null ? <span className="muted">-</span> : (
+                  <span className={"tag" + (p.delta < 0 ? " blocked" : "")}
+                    style={p.delta >= 0 ? { color: "var(--trend-good)" } : undefined}>
+                    {p.delta > 0 ? `+${p.delta}` : p.delta}%
+                  </span>
+                )}</td>
+                <td className="muted">
+                  {p.target_date || "-"}
+                  {p.days_left != null && ` (${p.days_left >= 0 ? t("plan.daysLeft", { n: p.days_left }) : t("plan.daysOver", { n: -p.days_left })})`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {(d.plan.overdue?.length || d.plan.at_risk?.length || d.plan.stale?.length) ? (
+          <div className="row" style={{ alignItems: "stretch", marginTop: 10 }}>
+            {d.plan.overdue?.length > 0 && <div style={{ flex: 1 }}>
+              <div className="h3">{t("plan.overdue", { n: d.plan.overdue.length })}</div>
+              <div className="feed">
+                {d.plan.overdue.map(t2 => (
+                  <div key={t2.id} className="item">
+                    <span className="sevdot high" />{t2.title}
+                    <div className="muted">{t2.project}{t2.assignee ? ` · ${t2.assignee}` : ""} · {t2.progress_pct}% · {t("plan.daysOver", { n: -t2.days_left })}</div>
+                  </div>
+                ))}
+              </div>
+            </div>}
+            {d.plan.at_risk?.length > 0 && <div style={{ flex: 1 }}>
+              <div className="h3">{t("plan.atRisk", { n: d.plan.at_risk.length })}</div>
+              <div className="feed">
+                {d.plan.at_risk.map(t2 => (
+                  <div key={t2.id} className="item">
+                    <span className="sevdot medium" />{t2.title}
+                    <div className="muted">{t2.project}{t2.assignee ? ` · ${t2.assignee}` : ""} · {t2.progress_pct}% · {t("dash.due", { date: t2.due_date })}</div>
+                  </div>
+                ))}
+              </div>
+            </div>}
+            {d.plan.stale?.length > 0 && <div style={{ flex: 1 }}>
+              <div className="h3">{t("plan.stale", { n: d.plan.stale.length })}</div>
+              <div className="feed">
+                {d.plan.stale.map(t2 => (
+                  <div key={t2.id} className="item">
+                    {t2.title}
+                    <div className="muted">{t2.project}{t2.assignee ? ` · ${t2.assignee}` : ""} · {t2.days_since_update == null ? t("plan.neverReported") : t("plan.lastUpdate", { n: t2.days_since_update })}</div>
+                  </div>
+                ))}
+              </div>
+            </div>}
+          </div>
+        ) : <p className="muted">{t("plan.allOnTrack")}</p>}
+      </div>}
+
       {vis("per_team") && (d.per_team?.length > 0) && <div className="card">
         <div className="h3">{t("dash.teams")}</div>
         <table>
@@ -917,12 +980,13 @@ function ProjectForm({ onDone }) {
 
 function TaskForm({ projects, onDone }) {
   const { t } = useLang();
-  const [form, setForm] = useState({ project_id: "", title: "", assignee: "", status: "not_started", progress_pct: 0 });
+  const [form, setForm] = useState({ project_id: "", title: "", assignee: "", status: "not_started", progress_pct: 0, due_date: "" });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   async function submit() {
     if (!form.project_id || !form.title.trim()) return;
-    await api.createTask({ ...form, project_id: Number(form.project_id), progress_pct: Number(form.progress_pct) });
-    setForm({ project_id: "", title: "", assignee: "", status: "not_started", progress_pct: 0 }); onDone();
+    await api.createTask({ ...form, project_id: Number(form.project_id), progress_pct: Number(form.progress_pct),
+                           due_date: form.due_date || null });
+    setForm({ project_id: "", title: "", assignee: "", status: "not_started", progress_pct: 0, due_date: "" }); onDone();
   }
   return (
     <div className="card">
@@ -944,6 +1008,7 @@ function TaskForm({ projects, onDone }) {
           </select>
         </div>
         <div><label>{t("form.progressPct")}</label><input type="number" min="0" max="100" value={form.progress_pct} onChange={e => set("progress_pct", e.target.value)} /></div>
+        <div><label>{t("form.dueDate")}</label><input type="date" value={form.due_date} onChange={e => set("due_date", e.target.value)} /></div>
       </div>
       <button onClick={submit}>{t("form.saveTask")}</button>
     </div>
@@ -1017,6 +1082,22 @@ function UpdateForm({ tasks, onDone, me, people = [] }) {
 // confirmation blocks -> save through the existing POST /updates. Nothing is saved
 // until "Confirm & save".
 // ---------------------------------------------------------------------------
+// Guided capture (review sprint): what a draft is missing that would make the update
+// more useful downstream. Pure derivation from the extract response; the person can
+// dismiss the hints and confirm anyway. Returns i18n keys.
+export function captureHints(draft) {
+  if (!draft) return [];
+  const isISO = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
+  const hints = [];
+  if (draft.progress_pct == null) hints.push("hint.progress");
+  if (!draft.status) hints.push("hint.status");
+  if (!draft.next_steps?.length) hints.push("hint.nextStep");
+  if (draft.blockers?.some(b => !b.owner)) hints.push("hint.blockerOwner");
+  if (draft.next_steps?.length && draft.next_steps.every(n => !isISO(n.due_date))) hints.push("hint.dueDate");
+  if ((draft.confidence ?? 1) < 0.6) hints.push("hint.lowConfidence");
+  return hints;
+}
+
 function AiUpdateForm({ tasks, onDone, me, people = [] }) {
   const { t } = useLang();
   const [text, setText] = useState("");
@@ -1025,6 +1106,7 @@ function AiUpdateForm({ tasks, onDone, me, people = [] }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [draft, setDraft] = useState(null); // null = no proposal yet
+  const [hideHints, setHideHints] = useState(false);
   const [source, setSource] = useState("text"); // flips to "voice" when text came from audio
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -1079,7 +1161,7 @@ function AiUpdateForm({ tasks, onDone, me, people = [] }) {
     setBusy(true); setErr("");
     try {
       const d = await api.extractUpdate({ raw_text: text, language });
-      setDraft(d);
+      setDraft(d); setHideHints(false);
     } catch (e) {
       setErr(e.message || t("error.extract"));
     } finally {
@@ -1162,6 +1244,20 @@ function AiUpdateForm({ tasks, onDone, me, people = [] }) {
             <p className="tag blocked">{t("ai.unknownProject")}</p>}
           {draft.unknown_task && !draft.unknown_project &&
             <p className="tag blocked">{t("ai.unknownTask", { task: draft.task })}</p>}
+
+          {!hideHints && captureHints(draft).length > 0 && (
+            <div style={{ border: "1px solid var(--border-soft)", borderLeft: "3px solid var(--accent)",
+                          borderRadius: 6, padding: "8px 12px", margin: "8px 0" }}>
+              <div className="row" style={{ alignItems: "center" }}>
+                <b style={{ fontSize: 13 }}>{t("hint.title")}</b>
+                <span style={{ flex: 1 }} />
+                <button className="link" onClick={() => setHideHints(true)}>{t("hint.dismiss")}</button>
+              </div>
+              <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                {captureHints(draft).map(k => <li key={k} className="muted" style={{ fontSize: 13 }}>{t(k)}</li>)}
+              </ul>
+            </div>
+          )}
 
           <div className="row">
             <div><label>{t("ai.projectMatched")}</label>
@@ -1265,8 +1361,23 @@ function DraftList({ title, items, render, onAdd, onDrop }) {
 }
 
 function UpdatesTable({ updates, tasks }) {
-  const { t } = useLang();
+  const { lang, t } = useLang();
   const taskTitle = (id) => tasks.find(t2 => t2.id === id)?.title || t("dash.noTask");
+  // On-demand translation into the current UI language. Nothing is stored: the
+  // original stays the record, the translation renders underneath it.
+  const [translations, setTranslations] = useState({});
+  const [busyId, setBusyId] = useState(null);
+  async function translate(u) {
+    setBusyId(u.id);
+    try {
+      const r = await api.translateUpdate(u.id, lang);
+      setTranslations(m => ({ ...m, [u.id]: r.text }));
+    } catch {
+      setTranslations(m => ({ ...m, [u.id]: t("updates.translateFailed") }));
+    } finally {
+      setBusyId(null);
+    }
+  }
   return (
     <div className="card">
       <h2>{t("updates.title")}</h2>
@@ -1280,7 +1391,15 @@ function UpdatesTable({ updates, tasks }) {
                 <td>{taskTitle(u.task_id)}</td>
                 <td>{u.author || "-"}</td>
                 <td>{u.language}</td>
-                <td>{u.raw_text || "-"}</td>
+                <td>
+                  {u.raw_text || "-"}
+                  {u.raw_text && u.language !== lang && !translations[u.id] && (
+                    <div><button className="link" disabled={busyId === u.id} onClick={() => translate(u)}>
+                      {busyId === u.id ? t("updates.translating") : t("updates.translate")}
+                    </button></div>
+                  )}
+                  {translations[u.id] && <div className="muted">{translations[u.id]}</div>}
+                </td>
                 <td>{u.blockers.map(b => <span key={b.id} className={`tag ${b.severity === "high" ? "blocked" : ""}`}>{b.description} ({t(`severity.${b.severity}`)})</span>)}</td>
                 <td>{u.next_steps.map(n => <span key={n.id} className="tag">{n.description}{n.owner ? ` · ${n.owner}` : ""}</span>)}</td>
               </tr>

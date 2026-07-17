@@ -214,6 +214,72 @@ def _assignee_scope(db: Session, config: dict | None):
     return in_scope
 
 
+# Plan-vs-actual thresholds (review sprint). A task is "at risk" when its deadline is
+# close and it is clearly not going to make it; "stale" when nobody has reported on it
+# for a week. Both are heuristics for the dashboard, not workflow states.
+AT_RISK_WINDOW_DAYS = 7
+AT_RISK_MIN_PROGRESS = 70
+STALE_AFTER_DAYS = 7
+
+
+def _plan_task_row(t, today):
+    title, pname, _ = _task_label(t)
+    last = max((u.created_at for u in t.updates), default=None)
+    return {
+        "id": t.id, "title": t.title, "title_ja": t.title_ja, "project": pname,
+        "assignee": t.assignee, "status": t.status.value, "progress_pct": t.progress_pct,
+        "due_date": t.due_date.isoformat() if t.due_date else None,
+        "days_left": (t.due_date - today).days if t.due_date else None,
+        "days_since_update": (today - last.date()).days if last else None,
+    }
+
+
+def plan_block(projects, tasks, today=None):
+    """Expected-vs-actual per project (linear ramp start_date -> target_date), plus
+    overdue, at-risk, and stale task lists. Projects without both dates get a null
+    expected_pct and delta; they still appear so missing dates are visible, not hidden.
+    """
+    today = today or dt.date.today()
+    per_project = []
+    for p in projects:
+        expected = None
+        if p.start_date and p.target_date and p.target_date > p.start_date:
+            frac = (today - p.start_date).days / (p.target_date - p.start_date).days
+            expected = max(0, min(100, round(frac * 100)))
+        ptasks = [t for t in tasks if t.project_id == p.id]
+        actual = round(sum(t.progress_pct for t in ptasks) / len(ptasks)) if ptasks else 0
+        per_project.append({
+            "id": p.id, "name": p.name, "name_ja": p.name_ja,
+            "start_date": p.start_date.isoformat() if p.start_date else None,
+            "target_date": p.target_date.isoformat() if p.target_date else None,
+            "expected_pct": expected, "actual_pct": actual,
+            "delta": (actual - expected) if expected is not None else None,
+            "days_left": (p.target_date - today).days if p.target_date else None,
+        })
+
+    open_tasks = [t for t in tasks if t.status.value != "done"]
+    overdue = [t for t in open_tasks if t.due_date and t.due_date < today]
+    at_risk = [t for t in open_tasks if t.due_date and today <= t.due_date
+               and (t.due_date - today).days <= AT_RISK_WINDOW_DAYS
+               and (t.progress_pct < AT_RISK_MIN_PROGRESS or t.status.value == "blocked")]
+    stale = []
+    for t in open_tasks:
+        last = max((u.created_at for u in t.updates), default=None)
+        if last is None or (today - last.date()).days >= STALE_AFTER_DAYS:
+            stale.append(t)
+
+    overdue.sort(key=lambda t: t.due_date)
+    at_risk.sort(key=lambda t: t.due_date)
+    stale.sort(key=lambda t: max((u.created_at for u in t.updates),
+                                 default=dt.datetime.min))
+    return {
+        "per_project": per_project,
+        "overdue": [_plan_task_row(t, today) for t in overdue],
+        "at_risk": [_plan_task_row(t, today) for t in at_risk],
+        "stale": [_plan_task_row(t, today) for t in stale],
+    }
+
+
 def dashboard_metrics(db: Session, config: dict | None = None):
     """Aggregate the fixed manager KPIs. With a week-6 `config`, focus/sort/limit the data:
       config = {project, status, severity, team, person, sort, limit, days, date_from, date_to}
@@ -395,6 +461,7 @@ def dashboard_metrics(db: Session, config: dict | None = None):
         "per_team": per_team,
         "per_person": per_person,
         "trends": trend_series(db, config),
+        "plan": plan_block(projects, tasks),
     }
 
 

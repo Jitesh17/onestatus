@@ -10,7 +10,7 @@ import re
 from .extractor import ollama_json, ExtractorError  # noqa: F401  (re-export for callers)
 
 SECTIONS = ["delivery", "per_project", "per_team", "per_person",
-            "blockers", "risks", "activity", "next_steps", "trends"]
+            "blockers", "risks", "activity", "next_steps", "trends", "plan"]
 STATUSES = ["not_started", "in_progress", "blocked", "done"]
 SEVERITIES = ["low", "medium", "high"]
 SORTS = ["severity", "recent", "progress", "due"]
@@ -46,7 +46,7 @@ Known people: {people}
 
 Sections: delivery (status chart), per_project (project table), per_team (team rollup table),
 per_person (people workload table), blockers, risks, activity (recent updates), next_steps,
-trends (charts over time).
+trends (charts over time), plan (plan vs actual, overdue / at-risk / stale tasks).
 
 Return JSON with exactly these keys:
 - "project": the FULL known project name the request focuses on, or null for all. Match abbreviations
@@ -155,6 +155,8 @@ _SECTION_WORDS = {
     "activity": ("activity", "update", "recent", "latest", "活動", "更新"),
     "next_steps": ("next step", "next-step", "action item", "todo", "次"),
     "trends": ("trend", "chart", "graph", "history", "over time", "トレンド", "推移"),
+    "plan": ("plan", "schedule", "deadline", "overdue", "stale", "behind", "on track",
+             "expected", "予定", "計画", "期限", "遅れ", "遅延"),
 }
 
 

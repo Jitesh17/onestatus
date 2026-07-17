@@ -13,7 +13,7 @@ def test_preset_configs_validate_as_viewconfig():
                for k, v in p["config"].items()}
         validated = schemas.ViewConfig(**cfg)
         assert all(s in ("delivery per_project per_team per_person blockers risks "
-                         "activity next_steps trends").split()
+                         "activity next_steps trends plan").split()
                    for s in validated.sections)
 
 
@@ -31,13 +31,13 @@ def test_get_presets_teams_from_roster(db):
     make_person(db, "Casey", team="Mobile")
     out = presets.get_presets(db)
     assert out["teams"] == ["Platform", "Mobile"]
-    assert len(out["presets"]) == 6
+    assert len(out["presets"]) == 7
 
 
 def test_get_presets_empty_roster(db):
     out = presets.get_presets(db)
     assert out["teams"] == []
-    assert len(out["presets"]) == 6
+    assert len(out["presets"]) == 7
 
 
 # ---------- seed idempotency ----------

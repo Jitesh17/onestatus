@@ -41,7 +41,7 @@ def test_presets_shape(client, db):
     assert r.status_code == 200
     body = r.json()
     assert body["teams"] == ["Platform"]
-    assert len(body["presets"]) == 6
+    assert len(body["presets"]) == 7
     needs_team = [p for p in body["presets"] if p["needs_team"]]
     assert len(needs_team) == 2
     for p in needs_team:

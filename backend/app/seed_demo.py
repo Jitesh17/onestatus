@@ -105,6 +105,35 @@ HISTORY_BLOCKERS = {
 }
 
 
+# ---------- Task due dates (review sprint: plan-vs-actual section) ----------
+# Relative to today so the demo story survives any demo date: one task overdue, one
+# blocked task at risk, the rest comfortably on track. task title -> days from today.
+DUE_DATES = {
+    "Content migration": -3,          # overdue: past due at 45 percent
+    "Design review pipeline": 4,      # at risk: blocked with the deadline this week
+    "Checkout flow rework": 12,
+    "Beta feedback collection": 20,
+    "ETL cutover module": 30,
+    "Legacy data validation": 45,
+}
+
+
+def seed_due_dates(db, due_dates=DUE_DATES):
+    """Idempotent: only fills a due_date that is currently empty, never overwrites."""
+    today = dt.date.today()
+    n = 0
+    for t in db.query(models.Task).all():
+        offset = due_dates.get(t.title)
+        if offset is not None and t.due_date is None:
+            t.due_date = today + dt.timedelta(days=offset)
+            n += 1
+    db.commit()
+    if n:
+        print(f"Task due dates seeded: {n}.")
+    else:
+        print("Task due dates already present, nothing added.")
+
+
 # ---------- Org roster (report-scenarios sprint) ----------
 # Powers the team/person rollups and the preset team picker. Names match the free-text
 # assignee/author/owner values used above; matching is by name at aggregation time.
@@ -241,6 +270,7 @@ def run(demo=DEMO, org=ORG, history=HISTORY, history_blockers=HISTORY_BLOCKERS):
         else:
             print("Demo projects already present, nothing added.")
         seed_history(db, history, history_blockers)
+        seed_due_dates(db)
     finally:
         db.close()
 

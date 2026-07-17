@@ -69,6 +69,16 @@ PRESETS = [
         },
     },
     {
+        "id": "plan_vs_actual",
+        "label": "Plan vs actual",
+        "nl_phrase": "show the plan view",
+        "needs_team": False,
+        "config": {
+            "sections": ["plan", "per_project"],
+            "summary": "Plan vs actual: expected progress, overdue, at-risk, stale",
+        },
+    },
+    {
         "id": "person_workload",
         "label": "Per-person workload",
         "nl_phrase": "show workload per person",

@@ -53,6 +53,7 @@ export const api = {
   createTask: (data) => req("/tasks", { method: "POST", body: JSON.stringify(data) }),
   listUpdates: () => req("/updates"),
   createUpdate: (data) => req("/updates", { method: "POST", body: JSON.stringify(data) }),
+  translateUpdate: (id, target) => req(`/updates/${id}/translate`, { method: "POST", body: JSON.stringify({ target }) }),
   extractUpdate: (data) => req("/extract", { method: "POST", body: JSON.stringify(data) }),
   transcribe: (formData) => upload("/transcribe", formData),
   dashboard: () => req("/dashboard"),

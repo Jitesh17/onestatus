@@ -141,6 +141,16 @@ class NextStepDraft(BaseModel):
     due_date: str | None = None  # free text; may be ISO, "Friday", or "金曜日"
 
 
+class TranslateRequest(BaseModel):
+    target: Literal["en", "ja"] = "en"
+
+
+class TranslationOut(BaseModel):
+    update_id: int
+    target: str
+    text: str
+
+
 class TranscriptOut(BaseModel):
     """Result of POST /transcribe (week 4). The text feeds the existing extract flow."""
     text: str
@@ -261,6 +271,40 @@ class PersonRollupRow(BaseModel):
     next_step_count: int                  # owner-matched: the workload signal
 
 
+class PlanProjectRow(BaseModel):
+    """Expected progress is a linear ramp from start_date to target_date; null when a
+    project is missing either date (shown as "no dates" rather than hidden)."""
+    id: int
+    name: str
+    name_ja: str | None = None
+    start_date: str | None = None
+    target_date: str | None = None
+    expected_pct: int | None = None
+    actual_pct: int = 0
+    delta: int | None = None              # actual - expected; negative = behind plan
+    days_left: int | None = None          # negative = past the target date
+
+
+class PlanTaskRow(BaseModel):
+    id: int
+    title: str
+    title_ja: str | None = None
+    project: str | None = None
+    assignee: str | None = None
+    status: str
+    progress_pct: int
+    due_date: str | None = None
+    days_left: int | None = None          # negative = overdue
+    days_since_update: int | None = None  # null = never reported on
+
+
+class PlanBlock(BaseModel):
+    per_project: list[PlanProjectRow] = []
+    overdue: list[PlanTaskRow] = []
+    at_risk: list[PlanTaskRow] = []
+    stale: list[PlanTaskRow] = []
+
+
 class TrendPoint(BaseModel):
     date: str                             # ISO day
     value: int
@@ -286,6 +330,7 @@ class DashboardOut(BaseModel):
     per_team: list[TeamRollupRow] = []
     per_person: list[PersonRollupRow] = []
     trends: Trends = Trends()
+    plan: PlanBlock = PlanBlock()
 
 
 # ---------- NL dashboard reconfiguration + saved views (week 6) ----------
