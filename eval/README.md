@@ -77,8 +77,10 @@ Week 3: run it again on the larger model if needed, compare scores, decide 7B vs
 python eval/run_eval.py --model qwen2.5:7b
 ```
 
-`run_eval.py` ships with a placeholder extractor so it runs today and shows the scoring
-output format. Replace the placeholder with a real call to the local model in week 2.
+`run_eval.py` calls the real production extractor (`backend/app/extractor.py`) by default,
+so `python eval/run_eval.py` scores the live local model. Pass `--placeholder` to run the
+empty-returning stub instead (useful when Ollama is not available and you just want to see
+the scoring output format).
 
 ## Scoring approach
 
